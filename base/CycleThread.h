@@ -7,16 +7,12 @@
 #include <memory>
 #include <mutex>
 
-#include "event/EventCycle.h"
-#include "base/MsgQueue.h"
-#include "event/Channel.h"
-
 namespace musketeer
 {
 class CycleThread
 {
 public:
-    explicit CycleThread(bool, int);
+    CycleThread(bool, int);
     ~CycleThread();
 
     // not copyable nor movable
@@ -28,7 +24,7 @@ public:
     // utility functions
     bool HasMsgQueue() const
     {
-        return (bool)msgQueue;
+        return eventfdChan != nullptr;
     }
 
     int GetIndex() const
@@ -37,18 +33,28 @@ public:
     }
 
     // push a request into queue and notify
-    void SendNotify();
+    void SendNotify(std::function<void()>);
 private:
-    // event fd
+    void threadFunction();
+
+    // message queue operations
+    void initMsgQueue();
+    void msgQueueReadCallback();
+
+    // thread name
+    string name;
+    // event fd channel
     std::unique_ptr<Channel> eventfdChan;
+    // event fd
+    int eventFd;
     // message queue lock
-    std::mutex mutex;
+    std::mutex mtx;
     // messaeg queue bound to this thread
     std::unique_ptr<MsgQueue> msgQueue;
     // event cycle owned by this thread itself
     std::unique_ptr<EventCycle> eventCycle;
     // thread object
-    std::thread::thread thread;
+    std::thread::thread threadObj;
     // thread index
     int threadIndex;
 };

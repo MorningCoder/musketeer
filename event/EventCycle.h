@@ -18,7 +18,7 @@ class Channel;
 class EventCycle
 {
 public:
-    EventCycle(Poller::PollerType type)
+    explicit EventCycle(Poller::PollerType type)
         : poller(Poller::New(type)),
           stop(false)
     { }
