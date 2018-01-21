@@ -12,6 +12,9 @@
 
 namespace musketeer
 {
+
+class EventCycle;
+
 class Channel
 {
 public:
@@ -20,7 +23,7 @@ public:
     // or this channel was just removed out of EventCycle
     // Removed means this channel is temporarily removed out of epoll
     // but is still under EventCycle's managment
-    enum Status { New = 0, Set, Removed};
+    enum ChannelStatus { MNew = 0, MSet, MRemoved};
 
     Channel(EventCycle* ec, int fd_)
         : fd(fd_),
@@ -29,51 +32,16 @@ public:
           revents(0),
           isReading(false),
           isWriting(false),
-          Status(Status::New)
+          Status(Channel::MNew)
     { }
     ~Channel()
     { }
 
-    // not copyable
+    // not copyable nor movable
     Channel(const Channel&) = delete;
     Channel& operator=(const Channel&) = delete;
-
-    // movable
-    Channel(Channel&& other)
-        : fd(other.fd),
-          eventCycle(other.eventCycle),
-          events(other.events),
-          revents(other.revents),
-          isReading(other.isReading),
-          isWriting(other.isWriting)
-    {
-        // -1 represents invalid
-        other.fd = -1;
-        other.eventCycle = null;
-        other.events = 0;
-        other.revents = 0;
-        other.isReading = 0;
-        other.isWriting = 0;
-    }
-    Channel& operator=(Channel&& other)
-    {
-        // self reference
-        if(this == &other)
-        {
-            return *this;
-        }
-
-        *this = other;
-
-        other.fd = -1;
-        other.eventCycle = null;
-        other.events = 0;
-        other.revents = 0;
-        other.isReading = 0;
-        other.isWriting = 0;
-
-        return *this;
-    }
+    Channel(Channel&&) = delete;
+    Channel& operator=(Channel&&) = delete;
 
     void EnableReading()
     {
@@ -149,16 +117,17 @@ public:
     void ProcessEvents();
 
     // wether this channel is already in eventCycle or a new one
-    Status Status;
+    ChannelStatus Status;
+
+    static const int CNEVENT = 0;
+    static const int CREVENT = 0x0F;
+    static const int CWEVENT = 0xF0;
+
 private:
     // call eventCycle to modify interest events
     void update();
     // remove itself from eventCycle
     void remove();
-
-    static const int CNEVENT;
-    static const int CREVENT;
-    static const int CWEVENT;
 
     // only a reference to fd
     const int fd;

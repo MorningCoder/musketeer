@@ -1,8 +1,11 @@
 #include <errno.h>
 #include <strings.h>
 #include <sys/epoll.h>
+#include <unistd.h>
+#include <cassert>
 
 #include "event/poller/EpollPoller.h"
+#include "event/Channel.h"
 
 using namespace musketeer;
 
@@ -24,11 +27,11 @@ EpollPoller::~EpollPoller()
 
 void EpollPoller::UpdateChannel(Channel* channel)
 {
-    if(channel->Status == Channel::Status::New
-        || channel->Status == Channel::Status::Removed)
+    if(channel->Status == Channel::MNew
+        || channel->Status == Channel::MRemoved)
     {
         // new one or removed out of epoll before
-        channel->Status = Channel::Status::Set;
+        channel->Status = Channel::MSet;
         updateEpoll(EPOLL_CTL_ADD, channel);
     }
     else
@@ -42,7 +45,7 @@ void EpollPoller::UpdateChannel(Channel* channel)
 
 void EpollPoller::RemoveChannel(Channel* channel)
 {
-    assert(channel->Status == Channel::Status::Set);
+    assert(channel->Status == Channel::MSet);
     assert(channel->IsNoneEvents());
 
     updateEpoll(EPOLL_CTL_DEL, channel);
@@ -80,27 +83,27 @@ void EpollPoller::Poll(std::vector<Channel*>& currChannels, int loopdelay)
 void EpollPoller::fillCurrentChannels(std::vector<Channel*>& currChan, int num)
 {
     assert(currChan.size() == 0);
-    assert(events.size() <= num);
+    assert(events.size() >= num);
 
     for(int i = 0; i < num; i++)
     {
         Channel* chan = static_cast<Channel*>(events[i].data.ptr);
         int revents = generaliseEvents(events[i].events);
         chan->SetREvents(revents);
-        currChan->push_back(chan);
+        currChan.push_back(chan);
     }
 }
 
 inline int EpollPoller::generaliseEvents(int events)
 {
-    return (events & ~(EPOLLIN|EPOLLPRI) ? Channel::CREVENT : 0)
-            | (events & ~(EPOLLOUT) ? Channel::CWEVENT : 0)
+    return (events & (EPOLLIN|EPOLLPRI) ? Channel::CREVENT : 0)
+            | (events & (EPOLLOUT) ? Channel::CWEVENT : 0);
 }
 
 inline int EpollPoller::transformEvents(int events)
 {
-    return (events & ~(Channel::CREVENT) ? (EPOLLIN|EPOLLPRI) : 0)
-            | (events & ~(Channel::CWEVENT) ? (EPOLLOUT) : 0)
+    return (events & Channel::CREVENT ? (EPOLLIN|EPOLLPRI) : 0)
+            | (events & Channel::CWEVENT ? (EPOLLOUT) : 0);
 }
 
 void EpollPoller::updateEpoll(int opt, Channel* channel)

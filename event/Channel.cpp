@@ -1,10 +1,7 @@
 #include "event/Channel.h"
+#include "event/EventCycle.h"
 
 using namespace musketeer;
-
-const Channel::CNEVENT = 0;
-const Channel::CREVENT = 0x0F;
-const Channel::CWEVENT = 0xF0;
 
 void Channel::update()
 {

@@ -3,12 +3,17 @@
 #ifndef MUSKETEER_EVENT_POLLER_H
 #define MUSKETEER_EVENT_POLLER_H
 
+#include <vector>
+
 namespace musketeer
 {
+
+class Channel;
+
 class Poller
 {
 public:
-    enum PollerType {Epoll, Poll};
+    enum PollerType {MEpoll, MPoll};
 
     Poller() = default;
     virtual ~Poller();

@@ -6,13 +6,15 @@
 
 #include <memory>
 #include <vector>
-#include <unorderd_map>
-//#include "event/Channel.h"
+#include <unordered_map>
 
-class Channel;
+#include "event/Poller.h"
 
 namespace musketeer
 {
+
+class Channel;
+
 class EventCycle
 {
 public:
@@ -45,7 +47,7 @@ private:
     // store active channels each time poller returns
     std::vector<Channel*> currentChannels;
     // store all channels that are registered in this EventCycle
-    std::unorderd_map<int, Channel*> allChannelsMap;
+    std::unordered_map<int, Channel*> allChannelsMap;
     // epoll or other events mutiplexers
     std::unique_ptr<Poller> poller;
     // a signal indicating the EventCycle should be stopped

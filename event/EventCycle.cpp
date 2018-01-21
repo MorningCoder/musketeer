@@ -1,11 +1,15 @@
-#include <event/EventCycle.h>
+#include <cassert>
+
+#include "event/EventCycle.h"
+#include "event/Channel.h"
 
 using namespace musketeer;
 
 void EventCycle::Loop()
 {
-    while(stop)
+    while(!stop)
     {
+        currentChannels.clear();
         poller->Poll(currentChannels, loopTimeout);
 
         for(Channel* channel : currentChannels)
@@ -19,7 +23,7 @@ void EventCycle::Loop()
 
 void EventCycle::UpdateChannel(Channel* channel)
 {
-    if(channel->Status == Channel::Status::New)
+    if(channel->Status == Channel::MNew)
     {
         // must not exist
         assert(allChannelsMap.find(channel->Getfd()) == allChannelsMap.end());
@@ -32,18 +36,18 @@ void EventCycle::UpdateChannel(Channel* channel)
 
 void EventCycle::RemoveChannel(Channel* channel)
 {
-    assert(channel->Status != Channel::Status::New);
+    assert(channel->Status != Channel::MNew);
 
-    if(channel->Status == Channel::Status::Set)
+    if(channel->Status == Channel::MSet)
     {
         poller->RemoveChannel(channel);
     }
     allChannelsMap.erase(channel->Getfd());
 }
 
-void DisableChannel(Channel* channel)
+void EventCycle::DisableChannel(Channel* channel)
 {
-    assert(channel->Status == Channel::Status::Set);
+    assert(channel->Status == Channel::MSet);
 
     poller->RemoveChannel(channel);
 }
