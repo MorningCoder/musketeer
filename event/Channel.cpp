@@ -13,6 +13,11 @@ void Channel::remove()
     eventCycle->RemoveChannel(this);
 }
 
+void Channel::disable()
+{
+    eventCycle->DisableChannel(this);
+}
+
 void Channel::ProcessEvents()
 {
     if(readCallback && (revents & CREVENT))

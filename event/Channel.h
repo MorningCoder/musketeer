@@ -10,6 +10,8 @@
 
 #include <functional>
 
+#include "cassert"
+
 namespace musketeer
 {
 
@@ -26,16 +28,18 @@ public:
     enum ChannelStatus { MNew = 0, MSet, MRemoved};
 
     Channel(EventCycle* ec, int fd_)
-        : fd(fd_),
+        : Status(Channel::MNew),
+          fd(fd_),
           eventCycle(ec),
           events(0),
           revents(0),
           isReading(false),
-          isWriting(false),
-          Status(Channel::MNew)
+          isWriting(false)
     { }
     ~Channel()
-    { }
+    {
+        assert(IsNoneEvents());
+    }
 
     // not copyable nor movable
     Channel(const Channel&) = delete;
@@ -67,10 +71,18 @@ public:
         update();
     }
 
+    // DisableAll() only move this channel out of epoll
     void DisableAll()
     {
-        events &= CNEVENT;
-        update();
+        events = CNEVENT;
+        disable();
+    }
+
+    // Close() move this channel out of epoll, at well as out of EventCycle
+    void Close()
+    {
+        events = CNEVENT;
+        remove();
     }
 
     void SetREvents(int revents_)
@@ -126,8 +138,10 @@ public:
 private:
     // call eventCycle to modify interest events
     void update();
-    // remove itself from eventCycle
+    // remove itself out eventCycle as well as out of epoll
     void remove();
+    // only remove out of epoll
+    void disable();
 
     // only a reference to fd
     const int fd;

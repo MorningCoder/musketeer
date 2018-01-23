@@ -10,7 +10,7 @@ namespace musketeer
 {
 
 // function associated with an object, implemented by bind()
-typedef function<void()> Task;
+typedef std::function<void()> Task;
 
 class MsgQueue
 {
@@ -19,15 +19,15 @@ public:
     ~MsgQueue()
     { }
 
-    Push(Task task)
+    void Push(Task task)
     {
         queue.push_back(std::move(task));
     }
-    Task&& Pop()
+    Task Pop()
     {
         if(queue.empty())
         {
-            return Task();
+            return std::move(Task());
         }
 
         Task task = queue.front();

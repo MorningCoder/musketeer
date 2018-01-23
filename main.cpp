@@ -11,6 +11,8 @@
 #include <sys/eventfd.h>
 #include <cstdlib>
 #include <sys/socket.h>
+#include "net/Socket.h"
+#include "net/InetAddr.h"
 
 using namespace std;
 using namespace std::placeholders;
@@ -20,8 +22,8 @@ int efd = 0;
 
 struct Owner
 {
-    int listenfd;
-    int connfd;
+    Socket listenfd;
+    Socket connfd;
 
     unique_ptr<Channel> listenchan;
     unique_ptr<Channel> connchan;
@@ -29,20 +31,18 @@ struct Owner
     EventCycle* ec;
 
     Owner(EventCycle* e)
-        : ec(e)
+        : listenfd(Socket::New(Socket::MIp4)),
+          connfd(),
+          ec(e)
     {
-        assert((listenfd = ::socket(AF_INET, SOCK_STREAM|SOCK_NONBLOCK, 0)));
+        InetAddr localAddr("127.0.0.1", 8000);
 
-        struct sockaddr_in S;
-        S.sin_family = AF_INET;
-        S.sin_port = htons(8000);
-        S.sin_addr.s_addr = inet_addr("127.0.0.1");
+        listenfd.BindAddr(localAddr);
+        listenfd.Listen();
 
-        ::bind(listenfd, (sockaddr*)&S, sizeof(S));
+        cout << "listen fd = " << listenfd.Getfd() << endl;
 
-        listen(listenfd, 5);
-
-        listenchan.reset(new Channel(e, listenfd));
+        listenchan.reset(new Channel(e, listenfd.Getfd()));
 
         listenchan->SetReadCallback(bind(&Owner::ProcessListenReadEvent, this));
         listenchan->EnableReading();
@@ -50,14 +50,19 @@ struct Owner
 
     void ProcessListenReadEvent()
     {
-        struct sockaddr_in addr;
-        socklen_t len;
+        bool overload = false;
+        InetAddr peeraddr;
+        connfd = listenfd.Accept(peeraddr, overload);
+        cout << "accept fd = " << connfd.Getfd() << endl;
 
-        connfd = ::accept4(listenfd, (sockaddr*)&addr, &len, SOCK_NONBLOCK);
+        if(overload)
+        {
+            // ...
+        }
 
-        cout << "process accept ret=" << connfd << " errno=" << errno << endl;
+        cout << "process accept connfd=" << connfd.Getfd() << endl;
 
-        connchan.reset(new Channel(ec, connfd));
+        connchan.reset(new Channel(ec, connfd.Getfd()));
 
         connchan->SetReadCallback(bind(&Owner::ProcessConnReadEvent, this));
         connchan->EnableReading();
@@ -66,12 +71,13 @@ struct Owner
     void ProcessConnReadEvent()
     {
         char buf[256];
-        int ret = read(connfd, buf, 256);
+        read(connfd.Getfd(), buf, 256);
 
-        buf[255] = '\0';
+        ::write(connfd.Getfd(), "hello\n", sizeof("hello"));
 
-        cout << "process read ret=" << ret << " errno=" << errno
-            << " buf=" << buf << endl;
+        connchan->Close();
+        connfd.Close();
+        // next cycle will set this a new one
     }
 };
 
@@ -106,8 +112,9 @@ int main()
 
     while(1)
     {
-        int sockfd = 0;
-        assert((sockfd = ::socket(AF_INET, SOCK_STREAM, 0)));
+        Socket sock = Socket::New(Socket::MIp4);
+
+        cout << "connect fd = " << sock.Getfd() << endl;
 
         struct sockaddr_in S;
         S.sin_family = AF_INET;
@@ -116,13 +123,11 @@ int main()
 
         socklen_t len = static_cast<socklen_t>(sizeof(S));
 
-        int cret = connect(sockfd, (sockaddr*)&S, len);
-        cout << "connect done ret=" << cret << " errno=" << errno << endl;
-        
-        write(sockfd, "Hello, hahahh, fuck you\n", sizeof("Hello, hahahh, fuck you\n"));
+        connect(sock.Getfd(), (sockaddr*)&S, len);
 
-        sleep(100);
+        ::write(sock.Getfd(), "Hello, hahahh, fuck you\n", sizeof("Hello, hahahh, fuck you\n"));
+
+        sleep(1);
     }
     t.join();
 }
-

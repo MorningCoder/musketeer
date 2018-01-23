@@ -6,13 +6,21 @@
 #include <thread>
 #include <memory>
 #include <mutex>
+#include <string>
+
+#include "event/Poller.h"
+#include "base/MsgQueue.h"
 
 namespace musketeer
 {
+
+class EventCycle;
+class Channel;
+
 class CycleThread
 {
 public:
-    CycleThread(bool, int);
+    CycleThread(bool, int, std::string, Poller::PollerType);
     ~CycleThread();
 
     // not copyable nor movable
@@ -33,7 +41,7 @@ public:
     }
 
     // push a request into queue and notify
-    void SendNotify(std::function<void()>);
+    void SendNotify(Task);
 private:
     void threadFunction();
 
@@ -42,7 +50,7 @@ private:
     void msgQueueReadCallback();
 
     // thread name
-    string name;
+    std::string name;
     // event fd channel
     std::unique_ptr<Channel> eventfdChan;
     // event fd
@@ -54,7 +62,7 @@ private:
     // event cycle owned by this thread itself
     std::unique_ptr<EventCycle> eventCycle;
     // thread object
-    std::thread::thread threadObj;
+    std::thread threadObj;
     // thread index
     int threadIndex;
 };

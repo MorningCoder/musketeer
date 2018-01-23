@@ -43,6 +43,8 @@ void EventCycle::RemoveChannel(Channel* channel)
         poller->RemoveChannel(channel);
     }
     allChannelsMap.erase(channel->Getfd());
+
+    channel->Status = Channel::MNew;
 }
 
 void EventCycle::DisableChannel(Channel* channel)

@@ -1,17 +1,20 @@
 #include <cassert>
+#include <functional>
 #include <sys/eventfd.h>
 #include <unistd.h>
-#include <types.h>
+#include <sys/types.h>
 
-#include "event/Poller.h"
 #include "base/CycleThread.h"
+#include "event/EventCycle.h"
+#include "event/Channel.h"
 
 using namespace musketeer;
 
-CycleThread::CycleThread(bool hasMsgQueue, int index, string name_, Poller::PollerType type)
-    : threadIndex(index),
-      name(std::move(name_)),
-      eventCycle(new EventCycle(type))
+CycleThread::CycleThread(bool hasMsgQueue, int index, std::string name_, Poller::PollerType type)
+    : name(std::move(name_)),
+      eventFd(-1),
+      eventCycle(new EventCycle(type)),
+      threadIndex(index)
 {
     assert(eventCycle);
 
@@ -20,13 +23,17 @@ CycleThread::CycleThread(bool hasMsgQueue, int index, string name_, Poller::Poll
         initMsgQueue();
     }
 
-    threadObj = std::thread::thread(bind(&CycleThread::threadFunction, this));
+    threadObj = std::thread(std::bind(&CycleThread::threadFunction, this));
     threadObj.detach();
 }
 
 CycleThread::~CycleThread()
 {
-    ::close(eventFd);
+    if(HasMsgQueue())
+    {
+        assert(eventFd >= 0);
+        ::close(eventFd);
+    }
 }
 
 void CycleThread::threadFunction()
@@ -51,7 +58,7 @@ void CycleThread::initMsgQueue()
     assert(!msgQueue);
     msgQueue.reset(new MsgQueue());
 
-    eventfdChan->SetReadCallback(bind(&CycleThread::msgQueueReadCallback, this));
+    eventfdChan->SetReadCallback(std::bind(&CycleThread::msgQueueReadCallback, this));
     eventfdChan->EnableReading();
 }
 
@@ -63,7 +70,7 @@ void CycleThread::msgQueueReadCallback()
     if(ret > 0)
     {
         mtx.lock();
-        Task task = msgQueue.Pop();
+        Task task = msgQueue->Pop();
         mtx.unlock();
 
         if(task)
@@ -73,15 +80,15 @@ void CycleThread::msgQueueReadCallback()
     }
 }
 
-void CycleThread::SendNotify(std::function<void()> task)
+void CycleThread::SendNotify(Task task)
 {
-    if(!task)
+    if(!task || !HasMsgQueue())
     {
         return;
     }
 
     mtx.lock();
-    msgQueue.Push(task);
+    msgQueue->Push(task);
     mtx.unlock();
 
     uint64_t num = 1;

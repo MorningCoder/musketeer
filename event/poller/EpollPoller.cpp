@@ -38,7 +38,7 @@ void EpollPoller::UpdateChannel(Channel* channel)
     {
         // already in epoll, only can be MODed
         // DEL is implemented in RemoveChannel()
-        assert(!channel->IsNoneEvents());
+        //assert(!channel->IsNoneEvents());
         updateEpoll(EPOLL_CTL_MOD, channel);
     }
 }
@@ -49,6 +49,7 @@ void EpollPoller::RemoveChannel(Channel* channel)
     assert(channel->IsNoneEvents());
 
     updateEpoll(EPOLL_CTL_DEL, channel);
+    channel->Status = Channel::MRemoved;
 }
 
 void EpollPoller::Poll(std::vector<Channel*>& currChannels, int loopdelay)
@@ -58,7 +59,7 @@ void EpollPoller::Poll(std::vector<Channel*>& currChannels, int loopdelay)
                                 static_cast<int>(events.size()),
                                 loopdelay);
 
-    int syserr = errno;
+    //int savedErrno = errno;
 
     if(numFds < 0)
     {
@@ -83,7 +84,7 @@ void EpollPoller::Poll(std::vector<Channel*>& currChannels, int loopdelay)
 void EpollPoller::fillCurrentChannels(std::vector<Channel*>& currChan, int num)
 {
     assert(currChan.size() == 0);
-    assert(events.size() >= num);
+    assert(events.size() >= static_cast<size_t>(num));
 
     for(int i = 0; i < num; i++)
     {
