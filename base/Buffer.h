@@ -44,6 +44,8 @@ public:
     ~Buffer()
     { }
 
+    // copy & move constructors use default
+
     // return part of the buffer ready to be writen by outside caller
     // this part must be the part after Get
     RawBuf AppendablePos()
@@ -57,6 +59,7 @@ public:
     }
 
     // some interfaces for appending(copying) data into this buffer
+    // will expand the buffer capacity if necessary
     void Append(const std::string&);
     void Append(RawBuf);
 
@@ -68,8 +71,20 @@ public:
     void MarkProcessed(size_t);
     void MarkAppended(size_t);
 
-    // expand the capacity manually
-    //void Expand(size_t);
+    void Expand(size_t s)
+    {
+        if(s > capacity)
+        {
+            buffer.resize(s);
+            capacity = buffer.capacity();
+        }
+    }
+
+    void Shrink()
+    {
+        buffer.shrink_to_fit();
+        capacity = buffer.capacity();
+    }
 
     // get some status of this buffer
     size_t Capacity() const
@@ -99,6 +114,50 @@ private:
     // index of the byte AFTER the last byte of available part
     size_t availEnd;
 };
+
+// buffer chain to manage buffers inside it
+/*class BufferChain
+{
+public:
+    BufferChain() = default;
+
+    BufferChain(int num)
+      : buffers(num)
+    { }
+
+    BufferChain(int num, size_t size)
+      : buffers(num, size)
+    { }
+
+    ~BufferChain() = default;
+
+    Buffer& NewAndAttachBack(size_t initSize = 0)
+    {
+        return buffers.emplace_back(initSize);
+    }
+    Buffer& NewAndAttachFront(size_t initSize = 0)
+    {
+        return buffers.emplace_front(initSize);
+    }
+
+    // call copy constructor
+    void Attach(const Buffer& buf)
+    {
+        buffers.push_back(buf);
+    }
+    // call move constructor
+    void Attach(Buffer&& buf)
+    {
+        buffers.push_back(buf);
+    }
+
+    // return the first buffer whose AvailableSize() > 0
+    Buffer* GetAvailableBuffer();
+    // return the first buffer whose AppendableSize() > 0
+    Buffer* GetAppendableBuffer();
+private:
+    std::list<Buffer> buffers;
+};*/
 }
 
 #endif //MUSKETEER_BASE_BUFFER_H

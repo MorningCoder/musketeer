@@ -40,16 +40,25 @@ void Buffer::MarkAppended(size_t size)
 
 void Buffer::Append(const string& s)
 {
-    size_t size = (s.size() > AppendableSize()) ? AppendableSize() : s.size();
-    std::copy(s.c_str(), s.c_str()+size, &buffer[availEnd]);
-    MarkAppended(size);
+    if(s.size() > AppendableSize())
+    {
+        size_t as = AppendableSize();
+        Expand((s.size()/as + 1)*as);
+    }
+
+    std::copy(s.c_str(), s.c_str()+s.size(), &buffer[availEnd]);
+    MarkAppended(s.size());
 }
 
 void Buffer::Append(RawBuf buf)
 {
-    size_t size = (buf.second > AppendableSize()) ? AppendableSize() : buf.second;
-    std::copy(buf.first, buf.first+size, &buffer[availEnd]);
-    MarkAppended(size);
+    if(buf.second > AppendableSize())
+    {
+        size_t as = AppendableSize();
+        Expand((buf.second/as + 1)*as);
+    }
+    std::copy(buf.first, buf.first+buf.second, &buffer[availEnd]);
+    MarkAppended(buf.second);
 }
 
 string Buffer::Retrive(size_t size)
@@ -65,3 +74,29 @@ string Buffer::Retrive(size_t size)
 
     return ret;
 }
+/*
+Buffer* GetAvailableBuffer()
+{
+    for(auto it = buffers.begin(); it != buffers.end(); it++)
+    {
+        if(it->AvailableSize() > 0)
+        {
+            return &*it;
+        }
+    }
+
+    return nullptr;
+}
+
+Buffer* GetAppendableBuffer()
+{
+    for(auto it = buffers.begin(); it != buffers.end(); it++)
+    {
+        if(it->AppendableSize() > 0)
+        {
+            return &*it;
+        }
+    }
+
+    return nullptr;
+}*/

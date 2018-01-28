@@ -9,8 +9,9 @@
 #define MUSKETEER_EVENT_CHANNEL_H
 
 #include <functional>
+#include <cassert>
 
-#include "cassert"
+#include "base/Utilities.h"
 
 namespace musketeer
 {
@@ -34,11 +35,15 @@ public:
           events(0),
           revents(0),
           isReading(false),
-          isWriting(false)
+          isWriting(false),
+          closed(false)
     { }
     ~Channel()
     {
-        assert(IsNoneEvents());
+        if(!closed)
+        {
+            Close();
+        }
     }
 
     // not copyable nor movable
@@ -82,6 +87,7 @@ public:
     void Close()
     {
         events = CNEVENT;
+        closed = true;
         remove();
     }
 
@@ -115,12 +121,12 @@ public:
         return fd;
     }
 
-    void SetReadCallback(std::function<void()> cb)
+    void SetReadCallback(EventCallback cb)
     {
         readCallback = std::move(cb);
     }
 
-    void SetWriteCallback(std::function<void()> cb)
+    void SetWriteCallback(EventCallback cb)
     {
         writeCallback = std::move(cb);
     }
@@ -155,10 +161,11 @@ private:
 
     bool isReading;
     bool isWriting;
+    bool closed;
 
     // read and write event handler
-    std::function<void()> readCallback;
-    std::function<void()> writeCallback;
+    EventCallback readCallback;
+    EventCallback writeCallback;
 };
 }
 

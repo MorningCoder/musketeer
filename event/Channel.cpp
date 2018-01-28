@@ -5,7 +5,14 @@ using namespace musketeer;
 
 void Channel::update()
 {
-    eventCycle->UpdateChannel(this);
+    if(events == CNEVENT)
+    {
+        disable();
+    }
+    else
+    {
+        eventCycle->UpdateChannel(this);
+    }
 }
 
 void Channel::remove()
