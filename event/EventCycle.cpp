@@ -53,3 +53,11 @@ void EventCycle::DisableChannel(Channel* channel)
 
     poller->RemoveChannel(channel);
 }
+
+void EventCycle::RegisterChannel(Channel* channel)
+{
+    assert(channel->Status == Channel::MNew);
+
+    allChannelsMap[channel->Getfd()] = channel;
+    channel->Status = Channel::MRemoved;
+}

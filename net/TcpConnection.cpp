@@ -85,7 +85,7 @@ void TcpConnection::Send(TcpConnectionCallback cb)
 
     if(!channel.IsWriting())
     {
-        channel.SetWriteCallback(bind(&TcpConnection::writeCallback, this));
+        //channel.SetWriteCallback(bind(&TcpConnection::writeCallback, this));
         channel.EnableWriting();
     }
 }

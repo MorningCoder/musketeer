@@ -1,5 +1,6 @@
 #include <linux/tcp.h>
 #include <cassert>
+#include <cstdlib>
 
 #include "net/Socket.h"
 #include "net/InetAddr.h"
@@ -7,7 +8,7 @@
 using namespace std;
 using namespace musketeer;
 
-void Socket::BindAddr(const InetAddr& addr)
+bool Socket::BindAddr(const InetAddr& addr)
 {
     assert(Valid());
     struct sockaddr_in addrIn = addr.Get();
@@ -15,7 +16,10 @@ void Socket::BindAddr(const InetAddr& addr)
            static_cast<socklen_t>(sizeof(addrIn))) < 0)
     {
         // TODO add log
+        return false;
     }
+
+    return true;
 }
 
 void Socket::Listen()
@@ -24,7 +28,7 @@ void Socket::Listen()
     if(::listen(fd, SOMAXCONN) < 0)
     {
         //TODO add log
-        //abort();
+        std::abort();
     }
 }
 

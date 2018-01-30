@@ -129,7 +129,11 @@ private:
     // application can use these buffers in limitation
     std::list<Buffer> writeBuf;
     std::list<Buffer> readBuf;
+    // mark errors every time read()/write() calls
     IOError ioError;
+    // address info
+    //InetAddr localAddr;
+    //InetAddr remoteAddr;
 };
 }
 

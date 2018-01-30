@@ -1,5 +1,4 @@
 #include "event/Channel.h"
-#include "event/EventCycle.h"
 
 using namespace musketeer;
 

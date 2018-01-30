@@ -70,7 +70,7 @@ public:
     }
 
     // bind()
-    void BindAddr(const InetAddr&);
+    bool BindAddr(const InetAddr&);
     // listen()
     void Listen();
     // close() and set this socket invalid

@@ -17,6 +17,7 @@
 #include <sys/socket.h>
 #include "net/Socket.h"
 #include "net/InetAddr.h"
+#include "net/Listener.h"
 
 using namespace std;
 using namespace std::placeholders;
@@ -26,31 +27,25 @@ int efd = 0;
 
 struct Owner
 {
-    Socket listenfd;
-    TcpConnectionPtr tcpConn;
-
-    unique_ptr<Channel> listenchan;
+    Listener listener;
 
     EventCycle* ec;
 
     Owner(EventCycle* e)
-        : listenfd(Socket::New(Socket::MIp4)),
+        : listener(bind(&Owner::ProcessConnected, this, _1),
+                    InetAddr("127.0.0.1", 8000), e, 1000),
           ec(e)
     {
-        InetAddr localAddr("127.0.0.1", 8000);
-
-        listenfd.BindAddr(localAddr);
-        listenfd.Listen();
-
-        cout << "listen fd = " << listenfd.Getfd() << endl;
-
-        listenchan.reset(new Channel(e, listenfd.Getfd()));
-
-        listenchan->SetReadCallback(bind(&Owner::ProcessListenReadEvent, this));
-        listenchan->EnableReading();
+        listener.Listen();
     }
 
-    void ProcessListenReadEvent()
+    void ProcessConnected(TcpConnectionPtr conn)
+    {
+        cout << "new conn " << conn->Status() << endl;
+        conn->Close();
+    }
+
+    /*void ProcessListenReadEvent()
     {
         bool overload = false;
         InetAddr peeraddr;
@@ -82,7 +77,7 @@ struct Owner
     {
         musketeer::IOError ior = ptr->CheckIOError();
         cout << "ProcessConnWriteEvent ioError=" << ior.first << " errno=" << ior.second << endl;
-    }
+    }*/
 };
 
 void threadFunc()
@@ -100,9 +95,11 @@ int main()
 
     sleep(1);
 
+    while(1)
+    {
     Socket sock = Socket::New(Socket::MIp4);
 
-    cout << "connect fd = " << sock.Getfd() << endl;
+    //cout << "connect fd = " << sock.Getfd() << endl;
 
     struct sockaddr_in S;
     S.sin_family = AF_INET;
@@ -112,11 +109,9 @@ int main()
     socklen_t len = static_cast<socklen_t>(sizeof(S));
 
     connect(sock.Getfd(), (sockaddr*)&S, len);
-
-    while(1)
-    {
-        ::write(sock.Getfd(), "Hello,hahahh,testtestxxxxx666",
+        int ret = ::write(sock.Getfd(), "Hello,hahahh,testtestxxxxx666",
                         sizeof("Hello,hahahh,testtestxxxxx666") - 1);
+        cout << "write ret=" << ret << endl;
         sleep(1);
     }
 

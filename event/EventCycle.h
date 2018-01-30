@@ -40,6 +40,8 @@ public:
     // disable all events in this channel but
     // this channel remains to be under EventCycle's control
     void DisableChannel(Channel*);
+    // add channel into allChannelsMap but do not modify its inside poller
+    void RegisterChannel(Channel*);
 
 private:
     static const int loopTimeout = 1000;

@@ -11,13 +11,11 @@
 #include <functional>
 #include <cassert>
 
+#include "event/EventCycle.h"
 #include "base/Utilities.h"
 
 namespace musketeer
 {
-
-class EventCycle;
-
 class Channel
 {
 public:
@@ -37,7 +35,9 @@ public:
           isReading(false),
           isWriting(false),
           closed(false)
-    { }
+    {
+        eventCycle->RegisterChannel(this);
+    }
     ~Channel()
     {
         if(!closed)
