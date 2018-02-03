@@ -4,6 +4,7 @@
 
 #include "net/Socket.h"
 #include "net/InetAddr.h"
+#include "base/Utilities.h"
 
 using namespace std;
 using namespace musketeer;
@@ -15,7 +16,8 @@ bool Socket::BindAddr(const InetAddr& addr)
     if(::bind(fd, InetAddr::GeneraliseAddr(&addrIn),
            static_cast<socklen_t>(sizeof(addrIn))) < 0)
     {
-        // TODO add log
+        LOG_ALERT("bind() failed on addr %s fd %d, errno=%d",
+                    addr.ToString().c_str(), fd, errno);
         return false;
     }
 
@@ -27,7 +29,7 @@ void Socket::Listen()
     assert(Valid());
     if(::listen(fd, SOMAXCONN) < 0)
     {
-        //TODO add log
+        LOG_FATAL("listen() failed on fd %d, errno=%d", fd, errno);
         std::abort();
     }
 }
@@ -45,7 +47,7 @@ bool Socket::ShutdownRead()
     int ret = ::shutdown(fd, SHUT_RD);
     if(ret < 0)
     {
-        //TODO add log
+        LOG_ALERT("shutdown() read end failed on fd %d, errno=%d", fd, errno);
         return false;
     }
     return true;
@@ -57,7 +59,7 @@ bool Socket::ShutdownWrite()
     int ret = ::shutdown(fd, SHUT_WR);
     if(ret < 0)
     {
-        //TODO add log
+        LOG_ALERT("shutdown() write end failed on fd %d, errno=%d", fd, errno);
         return false;
     }
     return true;
@@ -92,12 +94,13 @@ Socket Socket::Accept(InetAddr& addr, bool& fdRunout)
         case EPROTO:
         case EPERM:
             // these are ignorable errors
-            // TODO add log
+            LOG_WARN("accept() encountered ignorable error on fd %d, errno=%d", fd, savedErrno);
             break;
         case EMFILE:
         case ENFILE:
             // fd has run out
             fdRunout = true;
+            LOG_ALERT("accept() found fd run out on fd %d, errno=%d", fd, savedErrno);
             break;
         case EBADF:
         case EFAULT:
@@ -105,10 +108,12 @@ Socket Socket::Accept(InetAddr& addr, bool& fdRunout)
         case EOPNOTSUPP:
         case EINVAL:
             // these are unrecoverable errors
-            // TODO add log
+            LOG_WARN("accept() encountered unrecoverable error on fd %d, errno=%d",
+                        fd, savedErrno);
             break;
         default:
-            // TODO add log
+            LOG_WARN("accept() encountered unknown error on fd %d, errno=%d",
+                        fd, savedErrno);
             break;
         }
 
@@ -128,7 +133,7 @@ void Socket::SetNagle(bool on)
     if(::setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &val,
                      static_cast<socklen_t>(sizeof(val))) < 0)
     {
-        // TODO add log
+        LOG_ALERT("set TCP_NODELAY failed on fd %d, errno=%d", fd, errno);
     }
 }
 
@@ -139,7 +144,7 @@ void Socket::SetReuseaddr(bool on)
     if(::setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &val,
                      static_cast<socklen_t>(sizeof(val))) < 0)
     {
-        // TODO add log
+        LOG_ALERT("set SO_REUSEADDR failed on fd %d, errno=%d", fd, errno);
     }
 }
 
@@ -150,7 +155,7 @@ void Socket::SetKeepalive(bool on)
     if(::setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &val,
                      static_cast<socklen_t>(sizeof(val))) < 0)
     {
-        // TODO add log
+        LOG_ALERT("set SO_KEEPALIVE failed on fd %d, errno=%d", fd, errno);
     }
 }
 
@@ -161,7 +166,7 @@ void Socket::SetReuseport(bool on)
     if(::setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &val,
                     static_cast<socklen_t>(sizeof(val))) < 0)
     {
-        // TODO add log
+        LOG_ALERT("set SO_REUSEPORT failed on fd %d, errno=%d", fd, errno);
     }
 }
 
@@ -171,7 +176,7 @@ void Socket::SetReadBufferSize(int size)
     if(::setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &size,
                     static_cast<socklen_t>(sizeof(size))) < 0)
     {
-        // TODO add log
+        LOG_ALERT("set SO_RCVBUF failed on fd %d, errno=%d, size=%d", fd, errno, size);
     }
 }
 
@@ -181,7 +186,7 @@ void Socket::SetWriteBufferSize(int size)
     if(::setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &size,
                     static_cast<socklen_t>(sizeof(size))) < 0)
     {
-        //TODO add log
+        LOG_ALERT("set SO_SNDBUF failed on fd %d, errno=%d, size=%d", fd, errno, size);
     }
 }
 
@@ -190,9 +195,9 @@ InetAddr Socket::GetLocalAddr()
     assert(Valid());
     struct sockaddr_in addr;
     socklen_t len = sizeof(addr);
-    if(::getsockname(fd, InetAddr::GeneraliseAddr(&addr), &len) == 0)
+    if(::getsockname(fd, InetAddr::GeneraliseAddr(&addr), &len) != 0)
     {
-        // TODO add log
+        LOG_ALERT("getsockname() failed on fd %d, errno=%d", fd, errno);
     }
 
     return InetAddr(addr);
@@ -203,9 +208,9 @@ InetAddr Socket::GetRemoteAddr()
     assert(Valid());
     struct sockaddr_in addr;
     socklen_t len = sizeof(addr);
-    if(::getpeername(fd, InetAddr::GeneraliseAddr(&addr), &len) == 0)
+    if(::getpeername(fd, InetAddr::GeneraliseAddr(&addr), &len) != 0)
     {
-        // TODO add log
+        LOG_ALERT("getpeername() failed on fd %d, errno=%d", fd, errno);
     }
 
     return InetAddr(addr);
@@ -216,7 +221,7 @@ Socket Socket::New(AddrFamily af)
     int fd = socket(af, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
     if(fd < 0)
     {
-        //TODO add log
+        LOG_ALERT("socket() failed, errno=%d", errno);
         fd = -1;
     }
 

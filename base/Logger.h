@@ -6,36 +6,36 @@
 #include <cstdio>
 #include <string>
 #include <cstdarg>
+#include <cassert>
+
+#include "base/CycleThread.h"
 
 namespace musketeer
 {
-/*
 // max length of a line of logs in bytes
 const size_t CMaxLogLength = 2048;
+const size_t CMaxLogPrefixLength = 128;
 enum LogLevel { Debug = 0, Notice, Warn, Alert, Fatal };
 
-const char* LogLevelStr[5] = { "DEBUG", "NOTICE", "WARN", "ALERT", "FATAL" };
-
 void logFormat(LogLevel, const char*, int, const char*, const char*, ...);
-
-#define LOG_DEBUG(fmt, args...) \
-    logFormat(LogLevel::Debug, __FILE__, __LINE__, __func__, fmt, ##args)
 
 class Logger
 {
 public:
-    Logger(LogLevel defaultLevel, std::string fileName, int threadIndex)
-      : logFileName(fileName),
+    Logger()
+      : logFileName(),
         logFile(nullptr),
-        logThread(true, threadIndex, "logging", Poller::MEpoll),
-        currLevel(defaultLevel)
+        logThread(true, "logging", Poller::MEpoll),
+        currLevel(LogLevel::Debug),
+        inited(false)
     { }
 
     ~Logger()
     {
         if(logFile)
         {
-            std::flose(logFile);
+            assert(inited);
+            std::fclose(logFile);
         }
     }
 
@@ -44,12 +44,12 @@ public:
         return currLevel;
     }
 
-    bool Init();
-    void Log(const std::string);
+    bool Init(LogLevel, std::string, int);
+    void Log(const std::string&);
 
 private:
     // do actual logging
-    void log(const std::string&);
+    void log(const std::string&) const;
 
     // file name
     std::string logFileName;
@@ -59,7 +59,8 @@ private:
     CycleThread logThread;
     // only print logs of which level is greater than currLevel
     LogLevel currLevel;
-};*/
+    bool inited;
+};
 }
 
 #endif //MUSKETEER_BASE_LOG_H

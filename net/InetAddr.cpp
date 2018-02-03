@@ -2,6 +2,7 @@
 #include <cassert>
 
 #include "net/InetAddr.h"
+#include "base/Utilities.h"
 
 using namespace std;
 using namespace musketeer;
@@ -20,7 +21,7 @@ InetAddr::InetAddr(const string& ip, uint16_t port)
     addr.sin_family = AF_INET;
     if(!::inet_pton(AF_INET, ip.c_str(), &addr.sin_addr))
     {
-        // TODO add log
+        LOG_WARN("inet_pton() failed to parse ip %s", ip.c_str());
     }
     addr.sin_port = ::htons(port);
 }
@@ -31,7 +32,7 @@ InetAddr::InetAddr(const char* ip, uint16_t port)
     addr.sin_family = AF_INET;
     if(!::inet_pton(AF_INET, ip, &addr.sin_addr))
     {
-        // TODO add log
+        LOG_WARN("inet_pton() failed to parse ip %s", ip);
     }
     addr.sin_port = ::htons(port);
 }

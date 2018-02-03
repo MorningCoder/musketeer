@@ -16,6 +16,7 @@
 #include "unistd.h"
 #include <sys/eventfd.h>
 #include <cstdlib>
+#include "base/Manager.h"
 #include <sys/socket.h>
 #include "event/Poller.h"
 #include "net/Socket.h"
@@ -133,9 +134,11 @@ void threadFunc()
 
 int main()
 {
-    CycleThread t1(false, 0, "cycle1", Poller::MEpoll);
-    CycleThread t2(false, 1, "cycle2", Poller::MEpoll);
-    CycleThread t3(false, 2, "cycle3", Poller::MEpoll);
+    assert(gManager.Init());
+
+    CycleThread t1(false, "cycle1", Poller::MEpoll);
+    CycleThread t2(false, "cycle2", Poller::MEpoll);
+    CycleThread t3(false, "cycle3", Poller::MEpoll);
 
     Owner o1(t1.GetEventCycle());
     Owner o2(t2.GetEventCycle());
@@ -165,9 +168,9 @@ int main()
         sleep(1);
     }*/
 
-    t1.Start();
-    t2.Start();
-    t3.Start();
+    t1.Start(0);
+    t2.Start(1);
+    t3.Start(2);
 
     sleep(1000);
 

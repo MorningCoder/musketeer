@@ -8,14 +8,15 @@
 #include "base/CycleThread.h"
 #include "event/EventCycle.h"
 #include "event/Channel.h"
+#include "base/Utilities.h"
 
 using namespace musketeer;
 
-CycleThread::CycleThread(bool hasMsgQueue, int index, std::string name_, Poller::PollerType type)
+CycleThread::CycleThread(bool hasMsgQueue, std::string name_, Poller::PollerType type)
     : name(std::move(name_)),
       eventFd(-1),
       eventCycle(new EventCycle(type)),
-      threadIndex(index)
+      threadIndex(-1)
 {
     assert(eventCycle);
 
@@ -63,23 +64,29 @@ void CycleThread::initMsgQueue()
 
 void CycleThread::msgQueueReadCallback()
 {
-    uint64_t num = 0;
-    int ret = ::read(eventFd, &num, sizeof(num));
+    eventfd_t num = 0;
+    int ret = ::eventfd_read(eventFd, &num);
 
-    if(ret > 0)
+    LOG_DEBUG("read return %d num=%ld", ret, num);
+
+    if(ret == 0)
     {
-        mtx.lock();
-        Task task = msgQueue->Pop();
-        mtx.unlock();
-
-        if(task)
+        assert(num > 0);
+        while(num--)
         {
-            task();
+            mtx.lock();
+            Task task = msgQueue->Pop();
+            mtx.unlock();
+
+            if(task)
+            {
+                task();
+            }
         }
     }
     else
     {
-        // TODO Alert log
+        LOG_ALERT("read return %d num = %ld", ret, num);
     }
 }
 
@@ -94,13 +101,16 @@ void CycleThread::SendNotify(Task task)
     msgQueue->Push(std::move(task));
     mtx.unlock();
 
-    uint64_t num = 1;
-    ssize_t ret = ::write(eventFd, &num, sizeof(num));
-    assert(ret > 0);
+    eventfd_t num = 1;
+    int ret = ::eventfd_write(eventFd, num);
+    assert(ret == 0);
 }
 
-void CycleThread::Start()
+void CycleThread::Start(int index)
 {
+    threadIndex = index;
     threadObj = std::thread(std::bind(&CycleThread::threadFunction, this));
+    threadId = threadObj.get_id();
     threadObj.detach();
+    LOG_NOTICE("cycle thread '%s' started", name.c_str());
 }

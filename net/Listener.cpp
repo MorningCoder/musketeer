@@ -20,7 +20,7 @@ Listener::Listener(TcpConnectionCallback cb, const InetAddr& addr,
 
     if(!listenfd.Valid())
     {
-        // TODO add log
+        LOG_FATAL("listenfd is invalid !");
         std::abort();
     }
 
@@ -29,7 +29,7 @@ Listener::Listener(TcpConnectionCallback cb, const InetAddr& addr,
 
     if(!listenfd.BindAddr(addr))
     {
-        // TODO add log
+        LOG_FATAL("bind addr %s failed !", addr.ToString().c_str());
         std::abort();
     }
 }
@@ -53,11 +53,11 @@ void Listener::handleAccept()
     {
         if(fdRunout)
         {
-            // TODO add log
+            LOG_ALERT("Listener found fd has run out !");
         }
         else
         {
-            // TODO add log
+            LOG_ALERT("Listener accepting new connection failed !");
         }
         return;
     }
@@ -68,12 +68,16 @@ void Listener::handleAccept()
 
     if(connectionNum >= connectionLimit)
     {
-        // TODO alert log
+        LOG_ALERT("Listener found current connections number %d is over limit"
+                    " %d, closing new connections", connectionNum, connectionLimit);
         DecreaseConnectionNum();
         return;
     }
 
     assert(connectedCallback);
+
+    LOG_NOTICE("new TcpConnection established on fd %d, local addr %s, remote addr %s",
+                acceptSock.Getfd(), localAddr.ToString().c_str(), remoteAddr.ToString().c_str());
 
     TcpConnectionPtr conn = make_shared<TcpConnection>(std::move(acceptSock), eventCycle,
                                                         false, this, localAddr, remoteAddr);

@@ -20,7 +20,7 @@ class Channel;
 class CycleThread
 {
 public:
-    CycleThread(bool, int, std::string, Poller::PollerType);
+    CycleThread(bool, std::string, Poller::PollerType);
     ~CycleThread();
 
     // not copyable nor movable
@@ -42,7 +42,7 @@ public:
 
     std::thread::id ThreadId() const
     {
-        return threadObj.get_id();
+        return threadId;
     }
 
     EventCycle* GetEventCycle() const
@@ -53,7 +53,7 @@ public:
     // push a request into queue and notify
     void SendNotify(Task);
     // start thread
-    void Start();
+    void Start(int);
 
 private:
     void threadFunction();
@@ -78,6 +78,8 @@ private:
     std::thread threadObj;
     // thread index
     int threadIndex;
+    // thread::id
+    std::thread::id threadId;
 };
 }
 

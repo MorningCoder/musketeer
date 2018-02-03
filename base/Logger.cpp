@@ -1,55 +1,71 @@
 #include <unistd.h>
 #include <thread>
+#include <functional>
 
 #include "base/Logger.h"
+#include "base/Manager.h"
 
 using namespace std;
-using namespace musketeer;
-/*
+
+namespace musketeer
+{
+
+const char* LogLevelStr[5] = { "DEBUG", "NOTICE", "WARN", "ALERT", "FATAL" };
+
 void logFormat(LogLevel level, const char* file, int line,
                     const char* func, const char* fmt, ...)
 {
-    if(level < gManager.CurrentLogLevel())
+    if(level < gManager.GetLogger().CurrentLevel())
     {
         return;
     }
 
-    char str[CMaxLogLength];
+    char prefix[CMaxLogPrefixLength];
+    // make prefix
+    std::snprintf(prefix, CMaxLogPrefixLength, "[%s] %s:%d %s: ",
+                    LogLevelStr[level], file, line, func);
 
+    char actualLog[CMaxLogLength];
     va_list args;
-    va_start(args, func);
-    // TODO add timestamp
-    std::vsnprintf(str, CMaxLogLength, "[%s] %s:%d %s : %s",
-                    LogLevelStr[level], file, line, func, fmt, args);
+    va_start(args, fmt);
+    // make actual log
+    std::vsnprintf(actualLog, CMaxLogLength, fmt, args);
     va_end(args);
 
-    gManager.LogThread().Log(std::string(str));
+    gManager.GetLogger().Log(std::string(prefix) + std::string(actualLog));
 }
 
 
-bool Logger::Init()
+bool Logger::Init(LogLevel level, std::string name, int index)
 {
     assert(logFile == nullptr);
-    assert(!logFileName.empty());
+    assert(!name.empty());
 
-    if(!::access(logFileName.c_str(), W_OK))
+    currLevel = level;
+    logFileName = name;
+
+    if(::access(logFileName.c_str(), F_OK))
     {
-        std:perror("unable to open log file:");
+        std::perror("Logger::Init : log file does not exist");
         return false;
     }
 
     if(!(logFile = std::fopen(logFileName.c_str(), "a")))
     {
-        std:perror("unable to open log file:");
+        std::perror("Logger::Init : unable to open log file");
         return false;
     }
 
-    // logThread.Start();
+    inited = true;
+
+    logThread.Start(index);
+
     return true;
 }
 
 void Logger::Log(const string& str)
 {
+    assert(inited);
     // check if in current thread
     if(this_thread::get_id() == logThread.ThreadId())
     {
@@ -57,13 +73,18 @@ void Logger::Log(const string& str)
     }
     else
     {
-        // make lambda and SendNotify()
+        logThread.SendNotify(
+            [=]()
+            {
+                this->log(str);
+            }
+        );
     }
 }
 
-void log(const sting& str)
+void Logger::log(const std::string& str) const
 {
-    ::fwrite(str.c_str(), 1, str.size(), logFile);
+    ::fprintf(logFile, "%s\n", str.c_str());
     ::fflush(logFile);
 }
-*/
+}

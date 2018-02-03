@@ -163,7 +163,7 @@ void TcpConnection::handleWrite()
 void TcpConnection::handleError()
 {
     // peer reset the connection
-    // TODO Warn log
+    LOG_WARN("Peer %s just reset the connection, closing", remoteAddr.ToString().c_str());
     savedErrno = connfd.GetError();
     if(status != TcpConnectionStatus::Closed)
     {

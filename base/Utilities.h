@@ -9,11 +9,23 @@
 #include <list>
 
 #include "base/Buffer.h"
+#include "base/Logger.h"
 
 namespace musketeer
 {
 
 class TcpConnection;
+
+#define LOG_DEBUG(fmt, args...) \
+    logFormat(LogLevel::Debug, __FILE__, __LINE__, __func__, fmt, ##args)
+#define LOG_NOTICE(fmt, args...) \
+    logFormat(LogLevel::Notice, __FILE__, __LINE__, __func__, fmt, ##args)
+#define LOG_WARN(fmt, args...) \
+    logFormat(LogLevel::Warn, __FILE__, __LINE__, __func__, fmt, ##args)
+#define LOG_ALERT(fmt, args...) \
+    logFormat(LogLevel::Alert, __FILE__, __LINE__, __func__, fmt, ##args)
+#define LOG_FATAL(fmt, args...) \
+    logFormat(LogLevel::Fatal, __FILE__, __LINE__, __func__, fmt, ##args)
 
 // enums
 
