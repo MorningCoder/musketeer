@@ -8,14 +8,16 @@ using namespace musketeer;
 using namespace std;
 
 Listener::Listener(TcpConnectionCallback cb, const InetAddr& addr,
-                    EventCycle* ec, unsigned int connectionLimit_)
-  : listenfd(Socket::New(Socket::MIp4)),
+                    EventCycle* ec, int connectionLimit_)
+  : TcpConnectionCreator(),
+    listenfd(Socket::New(Socket::MIp4)),
     listenChannel(ec, listenfd.Getfd()),
     connectedCallback(std::move(cb)),
     eventCycle(ec),
-    connectionNum(0),
     connectionLimit(connectionLimit_)
 {
+    assert(connectedCallback);
+
     if(!listenfd.Valid())
     {
         // TODO add log
@@ -42,6 +44,7 @@ void Listener::Listen()
 void Listener::handleAccept()
 {
     InetAddr remoteAddr;
+    InetAddr localAddr;
     bool fdRunout = false;
 
     Socket acceptSock = listenfd.Accept(remoteAddr, fdRunout);
@@ -59,18 +62,20 @@ void Listener::handleAccept()
         return;
     }
 
-    connectionNum++;
+    localAddr = acceptSock.GetLocalAddr();
+
+    IncreaseConnectionNum();
 
     if(connectionNum >= connectionLimit)
     {
         // TODO alert log
-        connectionNum--;
+        DecreaseConnectionNum();
         return;
     }
 
     assert(connectedCallback);
 
-    TcpConnectionPtr conn = make_shared<TcpConnection>(std::move(acceptSock),
-                                                            eventCycle, false, nullptr);
+    TcpConnectionPtr conn = make_shared<TcpConnection>(std::move(acceptSock), eventCycle,
+                                                        false, this, localAddr, remoteAddr);
     connectedCallback(conn);
 }

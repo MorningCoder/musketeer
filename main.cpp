@@ -5,6 +5,8 @@
 #include <arpa/inet.h>
 #include <memory>
 #include <iostream>
+#include <map>
+#include <utility>
 #include <cassert>
 #include "event/EventCycle.h"
 #include <base/Utilities.h>
@@ -15,9 +17,11 @@
 #include <sys/eventfd.h>
 #include <cstdlib>
 #include <sys/socket.h>
+#include "event/Poller.h"
 #include "net/Socket.h"
 #include "net/InetAddr.h"
 #include "net/Listener.h"
+#include "base/CycleThread.h"
 
 using namespace std;
 using namespace std::placeholders;
@@ -25,24 +29,62 @@ using namespace musketeer;
 
 int efd = 0;
 
+typedef pair<TcpConnectionPtr, Buffer> ConnBuf;
+
 struct Owner
 {
     Listener listener;
-
+    Buffer readBuf;
+    map<int, ConnBuf*> connmap;
     EventCycle* ec;
 
     Owner(EventCycle* e)
         : listener(bind(&Owner::ProcessConnected, this, _1),
                     InetAddr("127.0.0.1", 8000), e, 1000),
+          readBuf(4096),
+          connmap(),
           ec(e)
     {
         listener.Listen();
     }
 
+    void ProcessWriteFinished(TcpConnectionPtr conn)
+    {
+        delete connmap[conn->Index()];
+        connmap.erase(conn->Index());
+        conn->Close();
+    }
+
+    void ProcessRead(TcpConnectionPtr conn, Buffer* buf)
+    {
+        if(conn->Status() != TcpConnectionStatus::Established)
+        {
+            assert(buf->AvailableSize() == 0);
+            delete connmap[conn->Index()];
+            connmap.erase(conn->Index());
+            conn->Close();
+            return;
+        }
+
+        //cout << "thread: " << this_thread::get_id() << " new request size "
+        //    << buf->AvailableSize() << endl;
+        Buffer* wbuf = conn->GetWriteableBuffer();
+        wbuf->Append("HTTP/1.1 200 OK\r\nServer: Haha\r\nContent-Length: 3\r\n\r\nxxx");
+        conn->Send(bind(&Owner::ProcessWriteFinished, this, _1));
+    }
+
     void ProcessConnected(TcpConnectionPtr conn)
     {
-        cout << "new conn " << conn->Status() << endl;
-        conn->Close();
+        if(conn->Status() != TcpConnectionStatus::Established)
+        {
+            conn->Close();
+            return;
+        }
+        cout << "thread: " << this_thread::get_id() << " new conn "
+            << conn->LocalAddr().ToString() << " " << conn->RemoteAddr().ToString() << endl;
+        ConnBuf* conbuf = new ConnBuf(conn, 4096);
+        conn->SetReadCallback(bind(&Owner::ProcessRead, this, _1, _2), &conbuf->second);
+        connmap[conn->Index()] = conbuf;
     }
 
     /*void ProcessListenReadEvent()
@@ -91,9 +133,15 @@ void threadFunc()
 
 int main()
 {
-    thread t(threadFunc);
+    CycleThread t1(false, 0, "cycle1", Poller::MEpoll);
+    CycleThread t2(false, 1, "cycle2", Poller::MEpoll);
+    CycleThread t3(false, 2, "cycle3", Poller::MEpoll);
 
-    sleep(1);
+    Owner o1(t1.GetEventCycle());
+    Owner o2(t2.GetEventCycle());
+    Owner o3(t3.GetEventCycle());
+
+    /*sleep(1);
 
     while(1)
     {
@@ -109,13 +157,19 @@ int main()
     socklen_t len = static_cast<socklen_t>(sizeof(S));
 
     connect(sock.Getfd(), (sockaddr*)&S, len);
-        int ret = ::write(sock.Getfd(), "Hello,hahahh,testtestxxxxx666",
-                        sizeof("Hello,hahahh,testtestxxxxx666") - 1);
-        cout << "write ret=" << ret << endl;
-        sleep(1);
-    }
+        //int ret = ::write(sock.Getfd(), "Hello,hahahh,testtestxxxxx666",
+        //                sizeof("Hello,hahahh,testtestxxxxx666") - 1);
 
-    t.join();
+        cout << "closed connection" << endl;
+        sock.Close();
+        sleep(1);
+    }*/
+
+    t1.Start();
+    t2.Start();
+    t3.Start();
+
+    sleep(1000);
 
     Buffer buf(50);
     assert(buf.AvailableSize() == 0);

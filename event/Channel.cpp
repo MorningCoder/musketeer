@@ -26,6 +26,11 @@ void Channel::disable()
 
 void Channel::ProcessEvents()
 {
+    if(errorCallback && (revents & CEEVENT))
+    {
+        errorCallback();
+    }
+
     if(readCallback && (revents & CREVENT))
     {
         readCallback();

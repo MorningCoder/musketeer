@@ -6,6 +6,9 @@
 #include <utility>
 #include <functional>
 #include <memory>
+#include <list>
+
+#include "base/Buffer.h"
 
 namespace musketeer
 {
@@ -13,18 +16,23 @@ namespace musketeer
 class TcpConnection;
 
 // enums
-enum IOErrors {ENoneError = 0, EIgnorableError, EReadError, EWriteError};
+
+enum TcpConnectionStatus {Established = 0, PeerClosed, Closed};
 
 // types
-typedef std::pair<IOErrors, int> IOError;
 typedef std::shared_ptr<TcpConnection> TcpConnectionPtr;
 
 // callbacks
 typedef std::function<void(TcpConnectionPtr)> TcpConnectionCallback;
+typedef std::function<void(TcpConnectionPtr, Buffer*)> TcpConnectionReadCallback;
 typedef std::function<void()> EventCallback;
 
 bool ErrnoIgnorable(int);
 
+// will return false only if unrecoverable error happend
+bool WritevFd(int, std::list<Buffer>&, int&, bool&);
+bool WriteFd(int, Buffer&, int&, bool&);
+bool ReadFd(int, Buffer&, int&, bool&);
 }
 
 #endif //MUSKETEER_BASE_UTILITIES_H

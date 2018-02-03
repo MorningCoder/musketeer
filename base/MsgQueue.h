@@ -5,11 +5,13 @@
 
 #include <deque>
 #include <functional>
+#include <any>
+#include <utility>
 
 namespace musketeer
 {
 
-// function associated with an object, implemented by bind()
+// function associated with an object
 typedef std::function<void()> Task;
 
 class MsgQueue

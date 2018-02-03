@@ -185,6 +185,32 @@ void Socket::SetWriteBufferSize(int size)
     }
 }
 
+InetAddr Socket::GetLocalAddr()
+{
+    assert(Valid());
+    struct sockaddr_in addr;
+    socklen_t len = sizeof(addr);
+    if(::getsockname(fd, InetAddr::GeneraliseAddr(&addr), &len) == 0)
+    {
+        // TODO add log
+    }
+
+    return InetAddr(addr);
+}
+
+InetAddr Socket::GetRemoteAddr()
+{
+    assert(Valid());
+    struct sockaddr_in addr;
+    socklen_t len = sizeof(addr);
+    if(::getpeername(fd, InetAddr::GeneraliseAddr(&addr), &len) == 0)
+    {
+        // TODO add log
+    }
+
+    return InetAddr(addr);
+}
+
 Socket Socket::New(AddrFamily af)
 {
     int fd = socket(af, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);

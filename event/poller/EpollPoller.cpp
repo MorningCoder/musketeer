@@ -97,14 +97,16 @@ void EpollPoller::fillCurrentChannels(std::vector<Channel*>& currChan, int num)
 
 inline int EpollPoller::generaliseEvents(int events)
 {
-    return (events & (EPOLLIN|EPOLLPRI) ? Channel::CREVENT : 0)
-            | (events & (EPOLLOUT) ? Channel::CWEVENT : 0);
+    return (events & (EPOLLIN|EPOLLPRI|EPOLLRDHUP) ? Channel::CREVENT : 0)
+            | (events & (EPOLLOUT) ? Channel::CWEVENT : 0)
+            | (events & (EPOLLERR|EPOLLHUP) ? Channel::CEEVENT : 0);
 }
 
 inline int EpollPoller::transformEvents(int events)
 {
-    return (events & Channel::CREVENT ? (EPOLLIN|EPOLLPRI) : 0)
-            | (events & Channel::CWEVENT ? (EPOLLOUT) : 0);
+    return (events & Channel::CREVENT ? (EPOLLIN|EPOLLPRI|EPOLLRDHUP) : 0)
+            | (events & Channel::CWEVENT ? (EPOLLOUT) : 0)
+            | (events & Channel::CEEVENT ? (EPOLLERR|EPOLLHUP) : 0);
 }
 
 void EpollPoller::updateEpoll(int opt, Channel* channel)

@@ -35,13 +35,26 @@ public:
         return eventfdChan != nullptr;
     }
 
-    int GetIndex() const
+    int Index() const
     {
         return threadIndex;
     }
 
+    std::thread::id ThreadId() const
+    {
+        return threadObj.get_id();
+    }
+
+    EventCycle* GetEventCycle() const
+    {
+        return eventCycle.get();
+    }
+
     // push a request into queue and notify
     void SendNotify(Task);
+    // start thread
+    void Start();
+
 private:
     void threadFunction();
 

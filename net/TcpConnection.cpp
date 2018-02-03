@@ -1,386 +1,184 @@
-#include <sys/uio.h>
-
 #include "net/TcpConnection.h"
+#include "net/Listener.h"
 
 using namespace musketeer;
 using namespace std;
 
-void TcpConnection::ReadBufferStat(size_t& availSize, size_t& appendSize,
-                                    size_t& availNum, size_t& appendNum) const
+void TcpConnection::Close()
 {
-    availSize = 0;
-    appendSize = 0;
-    availNum = 0;
-    appendNum = 0;
-    size_t c = 0;
-
-    for(auto it = readBuf.begin(); it != readBuf.end(); it++)
+    assert(readBuf == nullptr);
+    if(status != TcpConnectionStatus::Closed)
     {
-        if(it->AvailableSize() > 0)
-        {
-            availSize += it->AvailableSize();
-            availNum++;
-        }
+        // move out of epoll and EventCycle
+        channel.Close();
+        // close fd
+        connfd.Close();
+        // buffers will all be cleared
+        writeBufChain.clear();
+        // decrease active connections number
+        creator->DecreaseConnectionNum();
 
-        if(it->AppendableSize() > 0)
-        {
-            appendSize += it->AppendableSize();
-            appendNum++;
-        }
-
-        c += it->Capacity();
+        status = TcpConnectionStatus::Closed;
     }
-
-    assert(appendNum + availNum == readBuf.size() + 1);
-    assert(availSize + appendSize == c);
 }
 
-void TcpConnection::WriteBufferStat(size_t& availSize, size_t& appendSize,
-                                    size_t& availNum, size_t& appendNum) const
+void TcpConnection::SetReadCallback(TcpConnectionReadCallback cb, Buffer* buf)
 {
-    availSize = 0;
-    appendSize = 0;
-    availNum = 0;
-    appendNum = 0;
-    size_t c = 0;
+    assert(readBuf == nullptr);
+    assert(buf->AvailableSize() == 0);
+    assert(!channel.IsReading());
 
-    for(auto it = writeBuf.begin(); it != writeBuf.end(); it++)
+    readAvailableCallback = std::move(cb);
+    readBuf = buf;
+
+    if(status != TcpConnectionStatus::Established)
     {
-        if(it->AvailableSize() > 0)
-        {
-            availSize += it->AvailableSize();
-            availNum++;
-        }
-
-        if(it->AppendableSize() > 0)
-        {
-            appendSize += it->AppendableSize();
-            appendNum++;
-        }
-
-        c += it->Capacity();
+        readAvailableCallback(shared_from_this(), buf);
+        readBuf = nullptr;
+        return;
     }
 
-    assert(appendNum + availNum == writeBuf.size() + 1);
-    assert(availSize + appendSize == c);
+    channel.EnableReading();
 }
 
 void TcpConnection::Send(TcpConnectionCallback cb)
 {
+    assert(!channel.IsWriting());
+
     writeFinishedCallback = std::move(cb);
 
-    size_t availNum = 0;
-    size_t appendNum = 0;
-    size_t appendSize = 0;
-    size_t availSize = 0;
-
-    WriteBufferStat(availSize, appendSize, availNum, appendNum);
-
-    // if all the data have been writen into kernel then call the callback directly
-    if(availSize == 0)
+    if(status != TcpConnectionStatus::Established)
     {
+        // error occured on this connection or peer closed, cannot write any more
         writeFinishedCallback(shared_from_this());
         return;
     }
 
-    if(!channel.IsWriting())
-    {
-        //channel.SetWriteCallback(bind(&TcpConnection::writeCallback, this));
-        channel.EnableWriting();
-    }
+    assert(writeBufChain.size() != 0);
+    handleWrite();
 }
 
 Buffer* TcpConnection::GetWriteableBuffer()
 {
-    for(auto it = writeBuf.begin(); it != writeBuf.end(); it++)
+    size_t bsize = CDefaultWriteBufferSize;
+
+    for(auto it = writeBufChain.begin(); it != writeBufChain.end(); it++)
     {
+        if(bsize == CDefaultWriteBufferSize)
+        {
+            bsize = it->Capacity();
+        }
+
         if(it->AppendableSize() > 0)
         {
             return &*it;
         }
     }
 
-    return nullptr;
-}
-
-Buffer* TcpConnection::GetReadableBuffer()
-{
-    for(auto it = readBuf.begin(); it != readBuf.end(); it++)
+    if(writeBufChain.size() < CMaxWriteBufferNum)
     {
-        if(it->AvailableSize() > 0)
-        {
-            return &*it;
-        }
+        return &writeBufChain.emplace_back(bsize);
     }
 
     return nullptr;
 }
 
-void TcpConnection::handlePassiveClosed()
+void TcpConnection::handleRead()
 {
-    if(passiveClosedCallback)
+    if(status != TcpConnectionStatus::Established)
     {
-        passiveClosedCallback(shared_from_this());
+        channel.DisableReading();
+        readAvailableCallback(shared_from_this(), readBuf);
+        return;
     }
 
-    Close();
+    assert(readBuf);
+    bool peerClosed = false;
+
+    bool ret = ReadFd(connfd.Getfd(), *readBuf, savedErrno, peerClosed);
+
+    Buffer* rbuf = readBuf;
+    readBuf = nullptr;
+
+    if(peerClosed)
+    {
+        status = TcpConnectionStatus::PeerClosed;
+    }
+
+    if(!ret)
+    {
+        handleError();
+    }
+
+    channel.DisableReading();
+    readAvailableCallback(shared_from_this(), rbuf);
 }
 
-void TcpConnection::readCallback()
+void TcpConnection::handleWrite()
 {
-    size_t totalNum = readBuf.size();
-    if(totalNum > 1)
+    if(status != TcpConnectionStatus::Established)
     {
-        size_t availNum = 0;
-        size_t appendNum = 0;
-        size_t appendable = 0;
-        size_t available = 0;
-
-        ReadBufferStat(available, appendable, availNum, appendNum);
-
-        struct iovec iov[appendNum];
-        unsigned int i = 0;
-        for(auto it = readBuf.begin(); it != readBuf.end(); it++)
+        if(channel.IsWriting())
         {
-            if(it->AppendableSize() > 0)
-            {
-                RawBuf buf = it->AppendablePos();
-                iov[i].iov_base = static_cast<void*>(buf.first);
-                iov[i].iov_len = buf.second;
-                i++;
-            }
+            channel.DisableWriting();
         }
+        writeFinishedCallback(shared_from_this());
+        return;
+    }
 
-        assert(i == appendNum);
+    assert(writeBufChain.size() > 0);
 
-        ssize_t n = ::readv(connfd.Getfd(), iov, appendNum);
-        int savedErrno = errno;
-        assert(n <= static_cast<ssize_t>(appendable));
-        if(n < 0)
-        {
-            // TODO add log
-            if(!ErrnoIgnorable(savedErrno))
-            {
-                ioError = make_pair(EReadError, savedErrno);
-                channel.DisableReading();
-                readAvailableCallback(shared_from_this());
-            }
-            else if(available > 0)
-            {
-                ioError = make_pair(EIgnorableError, savedErrno);
-                readAvailableCallback(shared_from_this());
-            }
-            /*
-            else
-            {
-            for(auto it = readBuf.begin(); it != readBuf.end(); it++)
-            {
-                assert(it->AvailableSize() == 0);
-                assert(it->AppendableSize() == it->Capacity());
-            }
-            }
-            */
-        }
-        else if(n == 0)
-        {
-            ioError = make_pair(ENoneError, 0);
-            handlePassiveClosed();
-        }
-        else
-        {
-            ioError = make_pair(ENoneError, 0);
-            ssize_t origN = n;
-            for(auto it = readBuf.begin(); it != readBuf.end(); it++)
-            {
-                ssize_t apd = static_cast<ssize_t>(it->AppendableSize());
-                if(apd > 0 && n > 0)
-                {
-                    it->MarkAppended(n > apd ? apd : n);
-                    n -= apd;
-                    if(n >= 0)
-                    {
-                        appendNum--;
-                    }
-                }
-
-                if(n <= 0)
-                {
-                    break;
-                }
-            }
-
-            if(origN == static_cast<ssize_t>(appendable))
-            {
-                assert(appendNum == 0);
-                channel.DisableReading();
-            }
-
-            readAvailableCallback(shared_from_this());
-        }
+    bool allSent = false;
+    bool ret = false;
+    if(writeBufChain.size() == 1)
+    {
+        ret = WriteFd(connfd.Getfd(), writeBufChain.front(), savedErrno, allSent);
     }
     else
     {
-        assert(totalNum == 1);
+        ret = WritevFd(connfd.Getfd(), writeBufChain, savedErrno, allSent);
+    }
 
-        auto it = readBuf.begin();
-        size_t aps = it->AppendableSize();
-        assert(aps > 0);
+    if(!ret)
+    {
+        handleError();
+        if(channel.IsWriting())
+        {
+            channel.DisableWriting();
+        }
+        writeFinishedCallback(shared_from_this());
+        return;
+    }
 
-        RawBuf buf = it->AppendablePos();
-        int n = ::read(connfd.Getfd(), buf.first, buf.second);
-        int savedErrno = errno;
-        if(n < 0)
+    if(allSent)
+    {
+        if(channel.IsWriting())
         {
-            // TODO add log
-            if(!ErrnoIgnorable(savedErrno))
-            {
-                ioError = make_pair(EReadError, savedErrno);
-                channel.DisableReading();
-                readAvailableCallback(shared_from_this());
-            }
-            else if(it->AvailableSize() > 0)
-            {
-                ioError = make_pair(EIgnorableError, savedErrno);
-                readAvailableCallback(shared_from_this());
-            }
+            channel.DisableWriting();
         }
-        else if(n == 0)
-        {
-            ioError = make_pair(ENoneError, 0);
-            handlePassiveClosed();
-        }
-        else
-        {
-            ioError = make_pair(ENoneError, 0);
-            it->MarkAppended(n);
-            if(n == static_cast<ssize_t>(aps))
-            {
-                channel.DisableReading();
-            }
-            readAvailableCallback(shared_from_this());
-        }
+        writeFinishedCallback(shared_from_this());
     }
 }
 
-void TcpConnection::writeCallback()
+void TcpConnection::handleError()
 {
-    if(writeBuf.size() > 1)
+    // peer reset the connection
+    // TODO Warn log
+    savedErrno = connfd.GetError();
+    if(status != TcpConnectionStatus::Closed)
     {
-        size_t availSize = 0;
-        size_t appendSize = 0;
-        size_t availNum = 0;
-        size_t appendNum = 0;
-
-        WriteBufferStat(availSize, appendSize, availNum, appendNum);
-
-        assert(availSize > 0);
-
-        struct iovec iov[availNum];
-        unsigned int i = 0;
-        for(auto it = writeBuf.begin(); it != writeBuf.end(); it++)
-        {
-            if(it->AvailableSize() > 0)
-            {
-                RawBuf buf = it->AvailablePos();
-                iov[i].iov_base = static_cast<void*>(buf.first);
-                iov[i].iov_len = buf.second;
-                i++;
-            }
-        }
-        assert(i == availNum);
-
-        ssize_t n = ::writev(connfd.Getfd(), iov, availNum);
-        int savedErrno = errno;
-        if(n < 0)
-        {
-            if(!ErrnoIgnorable(savedErrno))
-            {
-                ioError = make_pair(EWriteError, savedErrno);
-                channel.DisableWriting();
-                writeFinishedCallback(shared_from_this());
-            }
-            else
-            {
-                ioError = make_pair(EIgnorableError, savedErrno);
-                // TODO add log
-            }
-        }
-        else if(n == 0)
-        {
-            ioError = make_pair(ENoneError, 0);
-            // TODO add log
-        }
-        else
-        {
-            ioError = make_pair(ENoneError, 0);
-            size_t origN = static_cast<size_t>(n);
-            for(auto it = writeBuf.begin(); it != writeBuf.end(); it++)
-            {
-                ssize_t avs = static_cast<ssize_t>(it->AvailableSize());
-                if(avs > 0 && n > 0)
-                {
-                    it->MarkProcessed(n > avs ? avs : n);
-
-                    n -= avs;
-                    if(n >= 0)
-                    {
-                        availNum--;
-                    }
-                }
-
-                if(n < 0)
-                {
-                    break;
-                }
-            }
-
-            if(origN == availSize)
-            {
-                assert(availNum == 0);
-                channel.DisableWriting();
-            }
-        }
-    }
-    else
-    {
-        assert(writeBuf.size() == 1);
-
-        auto it = writeBuf.begin();
-        size_t avs = it->AvailableSize();
-        assert(avs > 0);
-
-        RawBuf buf = it->AvailablePos();
-
-        ssize_t n = ::write(connfd.Getfd(), buf.first, buf.second);
-        int savedErrno = errno;
-        if(n < 0)
-        {
-            if(!ErrnoIgnorable(savedErrno))
-            {
-                ioError = make_pair(EWriteError, savedErrno);
-                channel.DisableWriting();
-                writeFinishedCallback(shared_from_this());
-            }
-            else
-            {
-                ioError = make_pair(EIgnorableError, savedErrno);
-                // TODO add log
-            }
-        }
-        else if(n == 0)
-        {
-            ioError = make_pair(ENoneError, 0);
-            // TODO add log
-        }
-        else
-        {
-            ioError = make_pair(ENoneError, 0);
-            it->MarkProcessed(n);
-            if(n == static_cast<ssize_t>(avs))
-            {
-                channel.DisableWriting();
-            }
-            writeFinishedCallback(shared_from_this());
-        }
+        Close();
     }
 }
+
+/*void TcpConnection::writeBufChainStat(size_t& availSize, size_t& appendSize)
+{
+    availSize = 0;
+    appendSize = 0;
+
+    for(auto it = writeBufChain.begin(); it != writeBufChain.end(); it++)
+    {
+        availSize += it->AvailableSize();
+        appendSize += it->AppendableSize();
+    }
+}*/

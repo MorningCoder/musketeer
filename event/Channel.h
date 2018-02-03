@@ -37,7 +37,12 @@ public:
           closed(false)
     {
         eventCycle->RegisterChannel(this);
+        /*
+        events |= CEEVENT;
+        update();
+        */
     }
+
     ~Channel()
     {
         if(!closed)
@@ -131,6 +136,11 @@ public:
         writeCallback = std::move(cb);
     }
 
+    void SetErrorCallback(EventCallback cb)
+    {
+        errorCallback = std::move(cb);
+    }
+
     // called each time poller returns
     void ProcessEvents();
 
@@ -138,8 +148,9 @@ public:
     ChannelStatus Status;
 
     static const int CNEVENT = 0;
-    static const int CREVENT = 0x0F;
-    static const int CWEVENT = 0xF0;
+    static const int CREVENT = 0x00F;
+    static const int CWEVENT = 0x0F0;
+    static const int CEEVENT = 0xF00;
 
 private:
     // call eventCycle to modify interest events
@@ -166,6 +177,7 @@ private:
     // read and write event handler
     EventCallback readCallback;
     EventCallback writeCallback;
+    EventCallback errorCallback;
 };
 }
 

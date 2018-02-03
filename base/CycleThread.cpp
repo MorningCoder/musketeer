@@ -3,6 +3,7 @@
 #include <sys/eventfd.h>
 #include <unistd.h>
 #include <sys/types.h>
+#include <sys/prctl.h>
 
 #include "base/CycleThread.h"
 #include "event/EventCycle.h"
@@ -22,9 +23,6 @@ CycleThread::CycleThread(bool hasMsgQueue, int index, std::string name_, Poller:
     {
         initMsgQueue();
     }
-
-    threadObj = std::thread(std::bind(&CycleThread::threadFunction, this));
-    threadObj.detach();
 }
 
 CycleThread::~CycleThread()
@@ -38,6 +36,7 @@ CycleThread::~CycleThread()
 
 void CycleThread::threadFunction()
 {
+    ::prctl(PR_SET_NAME, name.c_str());
     eventCycle->Loop();
 }
 
@@ -78,6 +77,10 @@ void CycleThread::msgQueueReadCallback()
             task();
         }
     }
+    else
+    {
+        // TODO Alert log
+    }
 }
 
 void CycleThread::SendNotify(Task task)
@@ -88,9 +91,16 @@ void CycleThread::SendNotify(Task task)
     }
 
     mtx.lock();
-    msgQueue->Push(task);
+    msgQueue->Push(std::move(task));
     mtx.unlock();
 
     uint64_t num = 1;
-    ::write(eventFd, &num, sizeof(num));
+    ssize_t ret = ::write(eventFd, &num, sizeof(num));
+    assert(ret > 0);
+}
+
+void CycleThread::Start()
+{
+    threadObj = std::thread(std::bind(&CycleThread::threadFunction, this));
+    threadObj.detach();
 }

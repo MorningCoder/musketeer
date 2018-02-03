@@ -38,7 +38,7 @@ InetAddr::InetAddr(const char* ip, uint16_t port)
 
 string InetAddr::ToString() const
 {
-    char buf[32];
+    char buf[INET_ADDRSTRLEN];
 
     assert(::inet_ntop(AF_INET, &addr.sin_addr, buf, INET_ADDRSTRLEN));
 

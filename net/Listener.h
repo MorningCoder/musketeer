@@ -9,6 +9,7 @@
 
 #include <cassert>
 
+#include "net/TcpConnectionCreator.h"
 #include "net/Socket.h"
 #include "event/Channel.h"
 #include "base/Utilities.h"
@@ -19,11 +20,11 @@ namespace musketeer
 
 class EventCycle;
 
-class Listener
+class Listener : public TcpConnectionCreator
 {
 public:
-    Listener(TcpConnectionCallback, const InetAddr&, EventCycle*, unsigned int);
-    ~Listener()
+    Listener(TcpConnectionCallback, const InetAddr&, EventCycle*, int);
+    ~Listener() final
     {
         assert(listenfd.Valid());
     }
@@ -42,12 +43,10 @@ private:
     TcpConnectionCallback connectedCallback;
     EventCycle* eventCycle;
 
-    // current connections number
-    unsigned long connectionNum;
     // connection number limit set by configure file
     // this is a number that is divided by number of threads
     // because we assume reuseport has balanced all the connections
-    unsigned long connectionLimit;
+    int connectionLimit;
 };
 }
 

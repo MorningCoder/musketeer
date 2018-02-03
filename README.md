@@ -1,2 +1,2 @@
 # musketeer
-一个封装了epoll的网络库
+一个封装了epoll的网络库以及简单的http服务器

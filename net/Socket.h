@@ -97,6 +97,11 @@ public:
     // setsockopt(SO_SNDBUF)
     void SetWriteBufferSize(int);
 
+    // getsockname()
+    InetAddr GetLocalAddr();
+    // getpeername()
+    InetAddr GetRemoteAddr();
+
     static Socket New(AddrFamily addrFamily);
 
 private:
