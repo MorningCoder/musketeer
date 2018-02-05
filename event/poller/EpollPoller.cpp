@@ -27,11 +27,11 @@ EpollPoller::~EpollPoller()
 
 void EpollPoller::UpdateChannel(Channel* channel)
 {
-    if(channel->Status == Channel::MNew
-        || channel->Status == Channel::MRemoved)
+    if(channel->Status == ChannelStatus::New
+        || channel->Status == ChannelStatus::Removed)
     {
         // new one or removed out of epoll before
-        channel->Status = Channel::MSet;
+        channel->Status = ChannelStatus::Set;
         updateEpoll(EPOLL_CTL_ADD, channel);
     }
     else
@@ -45,11 +45,11 @@ void EpollPoller::UpdateChannel(Channel* channel)
 
 void EpollPoller::RemoveChannel(Channel* channel)
 {
-    assert(channel->Status == Channel::MSet);
+    assert(channel->Status == ChannelStatus::Set);
     assert(channel->IsNoneEvents());
 
     updateEpoll(EPOLL_CTL_DEL, channel);
-    channel->Status = Channel::MRemoved;
+    channel->Status = ChannelStatus::Removed;
 }
 
 void EpollPoller::Poll(std::vector<Channel*>& currChannels, int loopdelay)

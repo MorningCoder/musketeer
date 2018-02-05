@@ -35,8 +35,7 @@ void logFormat(LogLevel level, const char* file, int line,
     gManager.GetLogger().Log(std::string(prefix) + std::string(actualLog));
 }
 
-
-bool Logger::Init(LogLevel level, std::string name, int index)
+bool Logger::CheckAndSet(LogLevel level, std::string name)
 {
     assert(logFile == nullptr);
     assert(!name.empty());
@@ -46,26 +45,34 @@ bool Logger::Init(LogLevel level, std::string name, int index)
 
     if(::access(logFileName.c_str(), F_OK))
     {
-        std::perror("Logger::Init : log file does not exist");
+        std::perror("Logger::CheckAndSet failed : log file does not exist");
         return false;
     }
-
-    if(!(logFile = std::fopen(logFileName.c_str(), "a")))
-    {
-        std::perror("Logger::Init : unable to open log file");
-        return false;
-    }
-
-    inited = true;
-
-    logThread.Start(index);
 
     return true;
 }
 
+void Logger::InitThread(int index)
+{
+    // CheckAndSet() must have been called
+    if(!(logFile = std::fopen(logFileName.c_str(), "a")))
+    {
+        std::perror("Logger::InitThread : unable to open log file");
+        std::abort();
+    }
+
+    inited = true;
+
+    logThread.Start(true, index);
+}
+
 void Logger::Log(const string& str)
 {
-    assert(inited);
+    if(!inited)
+    {
+        return;
+    }
+
     // check if in current thread
     if(this_thread::get_id() == logThread.ThreadId())
     {

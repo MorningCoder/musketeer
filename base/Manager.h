@@ -4,6 +4,11 @@
 #ifndef MUSKETEER_BASE_MANAGER_H
 #define MUSKETEER_BASE_MANAGER_H
 
+#include <vector>
+#include <atomic>
+#include <memory>
+
+#include "net/NetWorker.h"
 #include "base/Logger.h"
 
 namespace musketeer
@@ -14,8 +19,11 @@ public:
     Manager() = default;
     ~Manager() = default;
 
-    // init with conf
-    bool Init();
+    // check conf
+    bool CheckAndSet();
+
+    // init each thread
+    void InitThreads();
 
     // accessers
     Logger& GetLogger()
@@ -23,7 +31,12 @@ public:
         return logger;
     }
 private:
+    // threads
     Logger logger;
+    // pointing to current available woker
+    std::atomic<int> netWorkerIndex;
+    // NetWorker array
+    std::vector<std::unique_ptr<NetWorker>> netWorkers;
 };
 
 extern Manager gManager;

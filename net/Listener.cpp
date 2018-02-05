@@ -1,5 +1,6 @@
 #include <functional>
 #include <memory>
+#include <cstdio>
 
 #include "net/Listener.h"
 #include "net/TcpConnection.h"
@@ -7,10 +8,9 @@
 using namespace musketeer;
 using namespace std;
 
-Listener::Listener(TcpConnectionCallback cb, const InetAddr& addr,
-                    EventCycle* ec, int connectionLimit_)
+Listener::Listener(TcpConnectionCallback cb, EventCycle* ec, int connectionLimit_)
   : TcpConnectionCreator(),
-    listenfd(Socket::New(Socket::MIp4)),
+    listenfd(Socket::New(AddrFamily::IP4)),
     listenChannel(ec, listenfd.Getfd()),
     connectedCallback(std::move(cb)),
     eventCycle(ec),
@@ -20,18 +20,23 @@ Listener::Listener(TcpConnectionCallback cb, const InetAddr& addr,
 
     if(!listenfd.Valid())
     {
-        LOG_FATAL("listenfd is invalid !");
+        std::perror("listenfd is invalid :");
         std::abort();
     }
+}
 
+bool Listener::BindLocalAddr(const InetAddr& addr)
+{
     listenfd.SetReuseaddr(true);
     listenfd.SetReuseport(true);
 
     if(!listenfd.BindAddr(addr))
     {
         LOG_FATAL("bind addr %s failed !", addr.ToString().c_str());
-        std::abort();
+        return false;
     }
+
+    return true;
 }
 
 void Listener::Listen()
@@ -79,7 +84,9 @@ void Listener::handleAccept()
     LOG_NOTICE("new TcpConnection established on fd %d, local addr %s, remote addr %s",
                 acceptSock.Getfd(), localAddr.ToString().c_str(), remoteAddr.ToString().c_str());
 
-    TcpConnectionPtr conn = make_shared<TcpConnection>(std::move(acceptSock), eventCycle,
-                                                        false, this, localAddr, remoteAddr);
+    int acceptFd = acceptSock.Getfd();
+    TcpConnectionPtr conn = TcpConnection::New(std::move(acceptSock),
+                                                Channel(eventCycle, acceptFd),
+                                                false, this, localAddr, remoteAddr);
     connectedCallback(conn);
 }

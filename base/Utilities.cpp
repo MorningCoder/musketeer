@@ -335,3 +335,8 @@ else
 }
 }
 */
+
+void musketeer::onNewConnection(TcpConnectionPtr conn)
+{
+    LOG_DEBUG("new connection %p established", conn.get());
+}

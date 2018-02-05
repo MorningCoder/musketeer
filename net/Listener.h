@@ -23,12 +23,14 @@ class EventCycle;
 class Listener : public TcpConnectionCreator
 {
 public:
-    Listener(TcpConnectionCallback, const InetAddr&, EventCycle*, int);
+    Listener(TcpConnectionCallback, EventCycle*, int);
     ~Listener() final
     {
         assert(listenfd.Valid());
     }
 
+    // bind local addr when initiating, should be called before Listen()
+    bool BindLocalAddr(const InetAddr& addr);
     // will be called by every worker thread
     void Listen();
 private:

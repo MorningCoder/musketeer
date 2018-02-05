@@ -12,14 +12,14 @@
 namespace musketeer
 {
 
+// alias of AF_* macros
+enum AddrFamily {Local = AF_LOCAL, IP4 = AF_INET, IP6 = AF_INET6};
+
 class InetAddr;
 
 class Socket
 {
 public:
-    // alias of AF_* macros
-    enum AddrFamily {MLocal = AF_LOCAL, MIp4 = AF_INET, MIp6 = AF_INET6};
-
     // default constructor creates an invalid socket obj
     explicit Socket()
         : fd(-1)
@@ -82,6 +82,10 @@ public:
     int GetError();
     // accept4()
     Socket Accept(InetAddr&, bool&);
+    // returns 1 if connect() succeeded in starting the operation
+    // returns 0 if connect() failed but still retriable
+    // return -1 if uncoverable error occured
+    int Connect(const InetAddr&);
 
     // setsockopt(TCP_NODELAY)
     void SetNagle(bool);

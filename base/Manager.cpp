@@ -1,4 +1,9 @@
+#include <thread>
+#include <cstdio>
+
+#include "base/Utilities.h"
 #include "base/Manager.h"
+#include "net/InetAddr.h"
 
 using namespace std;
 
@@ -7,9 +12,39 @@ namespace musketeer
 
 Manager gManager;
 
-bool Manager::Init()
+bool Manager::CheckAndSet()
 {
-    return logger.Init(LogLevel::Debug, "./error.log", 0);
+    // check each threads
+    if(!logger.CheckAndSet(LogLevel::Debug, "./error.log"))
+    {
+        return false;
+    }
+
+    for(unsigned int i = 0; i < thread::hardware_concurrency(); i++)
+    {
+        auto netWorker = make_unique<NetWorker>(onNewConnection, i);
+        if(!netWorker->CheckAndSet(InetAddr("127.0.0.1", 8000)))
+        {
+            std::perror("NetWorker bind error :");
+            return false;
+        }
+
+        netWorkers.push_back(std::move(netWorker));
+    }
+
+    return true;
+}
+
+void Manager::InitThreads()
+{
+    // logger should be the first one
+    logger.InitThread(0);
+
+    // NetWorkers
+    for(auto it = netWorkers.begin(); it != netWorkers.end(); it++)
+    {
+        (*it)->InitThread();
+    }
 }
 
 }

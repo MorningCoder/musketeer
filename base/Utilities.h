@@ -27,6 +27,10 @@ class TcpConnection;
 #define LOG_FATAL(fmt, args...) \
     logFormat(LogLevel::Fatal, __FILE__, __LINE__, __func__, fmt, ##args)
 
+// const
+const int CInputConnectionLimit = 60000;
+const int COutputConnectionLimit = 30000;
+
 // enums
 
 enum TcpConnectionStatus {Established = 0, PeerClosed, Closed};
@@ -45,6 +49,9 @@ bool ErrnoIgnorable(int);
 bool WritevFd(int, std::list<Buffer>&, int&, bool&);
 bool WriteFd(int, Buffer&, int&, bool&);
 bool ReadFd(int, Buffer&, int&, bool&);
+
+// TODO tmp function, should delete
+void onNewConnection(TcpConnectionPtr);
 }
 
 #endif //MUSKETEER_BASE_UTILITIES_H

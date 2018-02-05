@@ -21,11 +21,11 @@ class TcpConnectionCreator;
 class TcpConnection : public std::enable_shared_from_this<TcpConnection>
 {
 public:
-    TcpConnection(Socket sock, EventCycle* ec, bool connected, TcpConnectionCreator* c,
+    TcpConnection(Socket sock, Channel chan, bool connected, TcpConnectionCreator* c,
                     const InetAddr& localAddr_, const InetAddr& remoteAddr_,
                     size_t wbufsize = CDefaultWriteBufferSize)
       : connfd(std::move(sock)),
-        channel(ec, connfd.Getfd()),
+        channel(std::move(chan)),
         positive(connected),
         status(TcpConnectionStatus::Established),
         savedErrno(0),
@@ -48,6 +48,12 @@ public:
     {
         Close();
     }
+
+    // not copyable nor movable
+    TcpConnection(const TcpConnection&) = delete;
+    TcpConnection& operator=(const TcpConnection&) = delete;
+    TcpConnection(TcpConnection&&) = delete;
+    TcpConnection& operator=(TcpConnection&&) = delete;
 
     TcpConnectionStatus Status() const
     {
@@ -82,6 +88,10 @@ public:
     // require a write buffer to append data by caller
     // will allocate one if there is no available ones
     Buffer* GetWriteableBuffer();
+
+    // factory method, the only interface to create TcpConnection
+    static TcpConnectionPtr New(Socket, Channel, bool, TcpConnectionCreator*,
+                                    const InetAddr&, const InetAddr&);
 
 private:
     // two internal functions to deal read/write events

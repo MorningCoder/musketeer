@@ -23,7 +23,10 @@ void EventCycle::Loop()
 
 void EventCycle::UpdateChannel(Channel* channel)
 {
-    if(channel->Status == Channel::MNew)
+    LOG_DEBUG("channel %p status %d fd %d updated",
+                channel, channel->Status, channel->Getfd());
+
+    if(channel->Status == ChannelStatus::New)
     {
         // must not exist
         assert(allChannelsMap.find(channel->Getfd()) == allChannelsMap.end());
@@ -36,28 +39,37 @@ void EventCycle::UpdateChannel(Channel* channel)
 
 void EventCycle::RemoveChannel(Channel* channel)
 {
-    assert(channel->Status != Channel::MNew);
+    LOG_DEBUG("channel %p status %d fd %d removed",
+                channel, channel->Status, channel->Getfd());
 
-    if(channel->Status == Channel::MSet)
+    assert(channel->Status != ChannelStatus::New);
+
+    if(channel->Status == ChannelStatus::Set)
     {
         poller->RemoveChannel(channel);
     }
     allChannelsMap.erase(channel->Getfd());
 
-    channel->Status = Channel::MNew;
+    channel->Status = ChannelStatus::New;
 }
 
 void EventCycle::DisableChannel(Channel* channel)
 {
-    assert(channel->Status == Channel::MSet);
+    LOG_DEBUG("channel %p status %d fd %d disabled",
+                channel, channel->Status, channel->Getfd());
+
+    assert(channel->Status == ChannelStatus::Set);
 
     poller->RemoveChannel(channel);
 }
 
 void EventCycle::RegisterChannel(Channel* channel)
 {
-    assert(channel->Status == Channel::MNew);
+    LOG_DEBUG("channel %p status %d fd %d registered",
+                channel, channel->Status, channel->Getfd());
+
+    assert(channel->Status == ChannelStatus::New);
 
     allChannelsMap[channel->Getfd()] = channel;
-    channel->Status = Channel::MRemoved;
+    channel->Status = ChannelStatus::Removed;
 }

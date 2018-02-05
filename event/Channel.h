@@ -16,18 +16,21 @@
 
 namespace musketeer
 {
+
+// status ued for eventCycle
+// New means this is a newly allocated channel
+// or this channel was just removed out of EventCycle
+// Removed means this channel is temporarily removed out of epoll
+// but is still under EventCycle's managment
+// Set means this channel is currently in epoll
+// Invalid means this channel was just std::move()ed and not valid any more
+enum ChannelStatus { New = 0, Set, Removed, Invalid };
+
 class Channel
 {
 public:
-    // status ued for eventCycle
-    // New means this is a newly allocated channel
-    // or this channel was just removed out of EventCycle
-    // Removed means this channel is temporarily removed out of epoll
-    // but is still under EventCycle's managment
-    enum ChannelStatus { MNew = 0, MSet, MRemoved};
-
     Channel(EventCycle* ec, int fd_)
-        : Status(Channel::MNew),
+        : Status(ChannelStatus::New),
           fd(fd_),
           eventCycle(ec),
           events(0),
@@ -36,6 +39,7 @@ public:
           isWriting(false),
           closed(false)
     {
+        LOG_DEBUG("Channel %p constructed", this);
         eventCycle->RegisterChannel(this);
         /*
         events |= CEEVENT;
@@ -45,17 +49,40 @@ public:
 
     ~Channel()
     {
-        if(!closed)
+        if(Status != ChannelStatus::Invalid && !closed)
         {
             Close();
+            LOG_DEBUG("Channel %p closed", this);
         }
+
+        LOG_DEBUG("Channel %p destroyed", this);
     }
 
-    // not copyable nor movable
+    // only support move constructor
+    Channel(Channel&& other)
+      : Status(other.Status),
+        fd(other.fd),
+        eventCycle(other.eventCycle),
+        events(other.events),
+        revents(other.revents),
+        isReading(other.isReading),
+        isWriting(other.isWriting),
+        closed(other.closed),
+        readCallback(std::move(other.readCallback)),
+        writeCallback(std::move(other.writeCallback)),
+        errorCallback(std::move(other.errorCallback))
+    {
+        LOG_DEBUG("Channel %p move constructed from %p", this, &other);
+        other.closed = true;
+        other.Status = ChannelStatus::Invalid;
+    }
+
+    // do not support copy assignment
+    Channel& operator=(Channel&& other) = delete;
+
+    // not copyable
     Channel(const Channel&) = delete;
     Channel& operator=(const Channel&) = delete;
-    Channel(Channel&&) = delete;
-    Channel& operator=(Channel&&) = delete;
 
     void EnableReading()
     {

@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <string>
 #include <cstdarg>
+#include <atomic>
 #include <cassert>
 
 #include "base/CycleThread.h"
@@ -25,7 +26,7 @@ public:
     Logger()
       : logFileName(),
         logFile(nullptr),
-        logThread(true, "logging", Poller::MEpoll),
+        logThread("logging", Poller::MEpoll),
         currLevel(LogLevel::Debug),
         inited(false)
     { }
@@ -44,7 +45,11 @@ public:
         return currLevel;
     }
 
-    bool Init(LogLevel, std::string, int);
+    // used for checking conf, must be called before daemon()ed
+    bool CheckAndSet(LogLevel, std::string);
+    // start thread, must be called after daemon()ed
+    void InitThread(int);
+    // the only logging interface
     void Log(const std::string&);
 
 private:
@@ -59,7 +64,8 @@ private:
     CycleThread logThread;
     // only print logs of which level is greater than currLevel
     LogLevel currLevel;
-    bool inited;
+    // must be atomic because multiple threads may access
+    std::atomic_bool inited;
 };
 }
 

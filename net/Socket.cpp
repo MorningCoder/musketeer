@@ -126,6 +126,49 @@ Socket Socket::Accept(InetAddr& addr, bool& fdRunout)
     }
 }
 
+int Socket::Connect(const InetAddr& remoteAddr)
+{
+    struct sockaddr_in raddr = remoteAddr.Get();
+    int ret = ::connect(fd, InetAddr::GeneraliseAddr(&raddr),
+                        static_cast<socklen_t>(sizeof(struct sockaddr_in)));
+    int savedErrno = (ret == 0) ? 0 : errno;
+    switch (savedErrno)
+    {
+    case 0:
+    case EINPROGRESS:
+    case EINTR:
+    case EISCONN:
+        LOG_DEBUG("connect() succeeded with errno=%d", savedErrno);
+      return 1;
+      break;
+
+    case EAGAIN:
+    case EADDRINUSE:
+    case EADDRNOTAVAIL:
+    case ECONNREFUSED:
+    case ENETUNREACH:
+        LOG_DEBUG("connect() failed but still retriable with errno=%d", savedErrno);
+      return 0;
+      break;
+
+    case EACCES:
+    case EPERM:
+    case EAFNOSUPPORT:
+    case EALREADY:
+    case EBADF:
+    case EFAULT:
+    case ENOTSOCK:
+        LOG_WARN("connect() failed unrecoverably with errno=%d", savedErrno);
+        return -1;
+        break;
+
+    default:
+        LOG_WARN("connect() failed due to unknown error with errno=%d", savedErrno);
+        return -1;
+        break;
+    }
+}
+
 void Socket::SetNagle(bool on)
 {
     assert(Valid());
@@ -194,10 +237,11 @@ InetAddr Socket::GetLocalAddr()
 {
     assert(Valid());
     struct sockaddr_in addr;
+    ::memset(&addr, 0, sizeof(addr));
     socklen_t len = sizeof(addr);
     if(::getsockname(fd, InetAddr::GeneraliseAddr(&addr), &len) != 0)
     {
-        LOG_ALERT("getsockname() failed on fd %d, errno=%d", fd, errno);
+        LOG_WARN("getsockname() failed on fd %d, errno=%d", fd, errno);
     }
 
     return InetAddr(addr);
@@ -207,10 +251,11 @@ InetAddr Socket::GetRemoteAddr()
 {
     assert(Valid());
     struct sockaddr_in addr;
+    ::memset(&addr, 0, sizeof(addr));
     socklen_t len = sizeof(addr);
     if(::getpeername(fd, InetAddr::GeneraliseAddr(&addr), &len) != 0)
     {
-        LOG_ALERT("getpeername() failed on fd %d, errno=%d", fd, errno);
+        LOG_WARN("getpeername() failed on fd %d, errno=%d", fd, errno);
     }
 
     return InetAddr(addr);

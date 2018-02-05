@@ -20,7 +20,7 @@ class Channel;
 class CycleThread
 {
 public:
-    CycleThread(bool, std::string, Poller::PollerType);
+    CycleThread(std::string, Poller::PollerType);
     ~CycleThread();
 
     // not copyable nor movable
@@ -52,8 +52,8 @@ public:
 
     // push a request into queue and notify
     void SendNotify(Task);
-    // start thread
-    void Start(int);
+    // start thread and a optional task before event cycle starts
+    void Start(bool, int, Task = Task());
 
 private:
     void threadFunction();

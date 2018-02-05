@@ -1,3 +1,5 @@
+#include <memory>
+
 #include "net/TcpConnection.h"
 #include "net/Listener.h"
 
@@ -169,6 +171,19 @@ void TcpConnection::handleError()
     {
         Close();
     }
+}
+
+TcpConnectionPtr TcpConnection::New(Socket sock, Channel chan, bool connecting,
+                                    TcpConnectionCreator* creator,
+                                    const InetAddr& localAddr, const InetAddr& remoteAddr)
+{
+    LOG_DEBUG("%s TcpConnection %s -> %s on fd %d is created",
+                connecting ? "positive" : "negative",
+                connecting ? localAddr.ToString().c_str() : remoteAddr.ToString().c_str(),
+                connecting ? remoteAddr.ToString().c_str() : localAddr.ToString().c_str(),
+                sock.Getfd());
+    return make_shared<TcpConnection>(std::move(sock), std::move(chan), connecting,
+                                        creator, localAddr, remoteAddr);
 }
 
 /*void TcpConnection::writeBufChainStat(size_t& availSize, size_t& appendSize)

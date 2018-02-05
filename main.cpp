@@ -1,3 +1,4 @@
+#include "net/Connector.h"
 #include <thread>
 #include <cstring>
 #include "base/Buffer.h"
@@ -22,6 +23,7 @@
 #include "net/Socket.h"
 #include "net/InetAddr.h"
 #include "net/Listener.h"
+#include "net/NetWorker.h"
 #include "base/CycleThread.h"
 
 using namespace std;
@@ -29,7 +31,7 @@ using namespace std::placeholders;
 using namespace musketeer;
 
 int efd = 0;
-
+/*
 typedef pair<TcpConnectionPtr, Buffer> ConnBuf;
 
 struct Owner
@@ -88,7 +90,7 @@ struct Owner
         connmap[conn->Index()] = conbuf;
     }
 
-    /*void ProcessListenReadEvent()
+    void ProcessListenReadEvent()
     {
         bool overload = false;
         InetAddr peeraddr;
@@ -120,7 +122,7 @@ struct Owner
     {
         musketeer::IOError ior = ptr->CheckIOError();
         cout << "ProcessConnWriteEvent ioError=" << ior.first << " errno=" << ior.second << endl;
-    }*/
+    }
 };
 
 void threadFunc()
@@ -130,19 +132,21 @@ void threadFunc()
     Owner o(cycle);
 
     cycle->Loop();
+}*/
+
+void NewConnCB(TcpConnectionPtr conn)
+{
+    LOG_DEBUG(" hahahah ");
 }
 
 int main()
 {
-    assert(gManager.Init());
+    if(!gManager.CheckAndSet())
+    {
+        return 1;
+    }
 
-    CycleThread t1(false, "cycle1", Poller::MEpoll);
-    CycleThread t2(false, "cycle2", Poller::MEpoll);
-    CycleThread t3(false, "cycle3", Poller::MEpoll);
-
-    Owner o1(t1.GetEventCycle());
-    Owner o2(t2.GetEventCycle());
-    Owner o3(t3.GetEventCycle());
+    gManager.InitThreads();
 
     /*sleep(1);
 
@@ -167,10 +171,6 @@ int main()
         sock.Close();
         sleep(1);
     }*/
-
-    t1.Start(0);
-    t2.Start(1);
-    t3.Start(2);
 
     sleep(1000);
 

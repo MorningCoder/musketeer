@@ -12,18 +12,13 @@
 
 using namespace musketeer;
 
-CycleThread::CycleThread(bool hasMsgQueue, std::string name_, Poller::PollerType type)
+CycleThread::CycleThread(std::string name_, Poller::PollerType type)
     : name(std::move(name_)),
       eventFd(-1),
       eventCycle(new EventCycle(type)),
       threadIndex(-1)
 {
     assert(eventCycle);
-
-    if(hasMsgQueue)
-    {
-        initMsgQueue();
-    }
 }
 
 CycleThread::~CycleThread()
@@ -106,8 +101,18 @@ void CycleThread::SendNotify(Task task)
     assert(ret == 0);
 }
 
-void CycleThread::Start(int index)
+void CycleThread::Start(bool hasMsgQueue, int index, Task task)
 {
+    if(hasMsgQueue)
+    {
+        initMsgQueue();
+    }
+
+    if(task)
+    {
+        task();
+    }
+
     threadIndex = index;
     threadObj = std::thread(std::bind(&CycleThread::threadFunction, this));
     threadId = threadObj.get_id();
