@@ -1,6 +1,8 @@
 #include <unistd.h>
 #include <errno.h>
 #include <sys/uio.h>
+#include <iomanip>
+#include <ctime>
 
 #include "base/Utilities.h"
 
@@ -198,6 +200,19 @@ bool musketeer::ReadFd(int fd, Buffer& buffer, int& savedErrno, bool& peerClosed
         buffer.MarkAppended(n);
         return true;
     }
+}
+
+std::string musketeer::TimepointToString(const Timepoint& tp)
+{
+    // convert to time_t and call localtime to localise
+    std::time_t t = std::chrono::system_clock::to_time_t(tp);
+    std::tm tmb;
+    ::localtime_r(&t, &tmb);
+    // example: 2018-01-13 08:00:40, up to 20 characters including '\0'
+    char timebuf[20];
+    std::strftime(timebuf, 20, "%F %T", &tmb);
+
+    return std::string(timebuf);
 }
 
 /*

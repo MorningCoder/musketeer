@@ -33,6 +33,10 @@ public:
     bool CheckAndSet(const InetAddr&);
     // start thread, must be called after daemon()ed
     void InitThread();
+
+    // the only interface for connection task, used to create a upstream connection
+    // callback() will always be called to inform the result
+    void CreateUpstream(const InetAddr&, TcpConnectionCallback);
 private:
     int index;
     CycleThread workerThread;

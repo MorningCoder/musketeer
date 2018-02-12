@@ -22,7 +22,7 @@ void logFormat(LogLevel level, const char* file, int line,
 
     char prefix[CMaxLogPrefixLength];
     // make prefix
-    std::snprintf(prefix, CMaxLogPrefixLength, "[%s] %s:%d %s: ",
+    std::snprintf(prefix, CMaxLogPrefixLength, " [%s] %s:%d %s: ",
                     LogLevelStr[level], file, line, func);
 
     char actualLog[CMaxLogLength];
@@ -32,7 +32,8 @@ void logFormat(LogLevel level, const char* file, int line,
     std::vsnprintf(actualLog, CMaxLogLength, fmt, args);
     va_end(args);
 
-    gManager.GetLogger().Log(std::string(prefix) + std::string(actualLog));
+    gManager.GetLogger().Log(TimepointToString(Now()) +
+                                std::string(prefix) + std::string(actualLog));
 }
 
 bool Logger::CheckAndSet(LogLevel level, std::string name)

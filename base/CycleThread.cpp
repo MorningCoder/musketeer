@@ -14,8 +14,8 @@ using namespace musketeer;
 
 CycleThread::CycleThread(std::string name_, Poller::PollerType type)
     : name(std::move(name_)),
-      eventFd(-1),
       eventCycle(new EventCycle(type)),
+      eventFd(-1),
       threadIndex(-1)
 {
     assert(eventCycle);

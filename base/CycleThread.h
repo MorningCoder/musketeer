@@ -64,6 +64,8 @@ private:
 
     // thread name
     std::string name;
+    // event cycle owned by this thread itself
+    std::unique_ptr<EventCycle> eventCycle;
     // event fd channel
     std::unique_ptr<Channel> eventfdChan;
     // event fd
@@ -72,8 +74,6 @@ private:
     std::mutex mtx;
     // messaeg queue bound to this thread
     std::unique_ptr<MsgQueue> msgQueue;
-    // event cycle owned by this thread itself
-    std::unique_ptr<EventCycle> eventCycle;
     // thread object
     std::thread threadObj;
     // thread index

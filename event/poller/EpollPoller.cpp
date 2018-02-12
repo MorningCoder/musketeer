@@ -15,8 +15,8 @@ EpollPoller::EpollPoller()
 {
     if(epollfd < 0)
     {
-        // TODO add log
-        exit(1);
+        LOG_FATAL("epoll_create() failed ! errno %d", errno);
+        std::abort();
     }
 }
 

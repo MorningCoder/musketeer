@@ -12,3 +12,8 @@ void NetWorker::InitThread()
 {
     workerThread.Start(true, index, [this](){ this->listener.Listen();});
 }
+
+void NetWorker::CreateUpstream(const InetAddr& addr, TcpConnectionCallback callback)
+{
+    connector.Connect(addr, std::move(callback));
+}
