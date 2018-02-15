@@ -126,12 +126,12 @@ Socket Socket::Accept(InetAddr& addr, bool& fdRunout)
     }
 }
 
-int Socket::Connect(const InetAddr& remoteAddr)
+int Socket::Connect(const InetAddr& remoteAddr, int& savedErrno)
 {
     struct sockaddr_in raddr = remoteAddr.Get();
     int ret = ::connect(fd, InetAddr::GeneraliseAddr(&raddr),
                         static_cast<socklen_t>(sizeof(struct sockaddr_in)));
-    int savedErrno = (ret == 0) ? 0 : errno;
+    savedErrno = (ret == 0) ? 0 : errno;
     switch (savedErrno)
     {
     case 0:

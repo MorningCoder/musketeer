@@ -5,35 +5,35 @@
 
 #include <thread>
 #include <memory>
-#include <mutex>
 #include <string>
 
 #include "event/Poller.h"
-#include "base/MsgQueue.h"
+#include "event/EventCycle.h"
 
 namespace musketeer
 {
 
-class EventCycle;
-class Channel;
+typedef std::function<void()> Task;
 
 class CycleThread
 {
 public:
-    CycleThread(std::string, Poller::PollerType);
-    ~CycleThread();
+    CycleThread(std::string name_, PollerType type)
+      : eventCycle(new EventCycle(type)),
+        name(std::move(name_)),
+        threadIndex(-1)
+    {
+        assert(eventCycle);
+    }
+
+    ~CycleThread()
+    { }
 
     // not copyable nor movable
     CycleThread(const CycleThread&) = delete;
     CycleThread& operator=(const CycleThread&) = delete;
     CycleThread(CycleThread&&) = delete;
     CycleThread& operator=(CycleThread&&) = delete;
-
-    // utility functions
-    bool HasMsgQueue() const
-    {
-        return eventfdChan != nullptr;
-    }
 
     int Index() const
     {
@@ -50,35 +50,25 @@ public:
         return eventCycle.get();
     }
 
-    // push a request into queue and notify
-    void SendNotify(Task);
-    // start thread and a optional task before event cycle starts
-    void Start(bool, int, Task = Task());
+    void Start(int, Task = Task());
+
+    void Stop()
+    {
+        eventCycle->Stop();
+    }
 
 private:
     void threadFunction();
 
-    // message queue operations
-    void initMsgQueue();
-    void msgQueueReadCallback();
-
-    // thread name
-    std::string name;
     // event cycle owned by this thread itself
     std::unique_ptr<EventCycle> eventCycle;
-    // event fd channel
-    std::unique_ptr<Channel> eventfdChan;
-    // event fd
-    int eventFd;
-    // message queue lock
-    std::mutex mtx;
-    // messaeg queue bound to this thread
-    std::unique_ptr<MsgQueue> msgQueue;
-    // thread object
+    // thread name
+    std::string name;
+    // thread obj
     std::thread threadObj;
     // thread index
     int threadIndex;
-    // thread::id
+    // thread id
     std::thread::id threadId;
 };
 }

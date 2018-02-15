@@ -8,13 +8,13 @@
 namespace musketeer
 {
 
+enum PollerType {Epoll, Poll};
+
 class Channel;
 
 class Poller
 {
 public:
-    enum PollerType {MEpoll, MPoll};
-
     Poller() = default;
     virtual ~Poller();
 

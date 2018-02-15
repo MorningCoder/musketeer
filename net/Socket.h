@@ -85,7 +85,7 @@ public:
     // returns 1 if connect() succeeded in starting the operation
     // returns 0 if connect() failed but still retriable
     // return -1 if uncoverable error occured
-    int Connect(const InetAddr&);
+    int Connect(const InetAddr&, int&);
 
     // setsockopt(TCP_NODELAY)
     void SetNagle(bool);

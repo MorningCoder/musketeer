@@ -2,6 +2,20 @@
 
 using namespace musketeer;
 
+void Channel::Close()
+{
+    events = CNEVENT;
+    remove();
+
+    // should set these functions to nullptr
+    // because they may be bound with some shared_ptrs
+    readCallback = nullptr;
+    writeCallback = nullptr;
+    errorCallback = nullptr;
+
+    closed = true;
+}
+
 void Channel::update()
 {
     if(events == CNEVENT)

@@ -4,16 +4,17 @@
 
 #include "net/Listener.h"
 #include "net/TcpConnection.h"
+#include "net/NetWorker.h"
 
 using namespace musketeer;
 using namespace std;
 
-Listener::Listener(TcpConnectionCallback cb, EventCycle* ec, int connectionLimit_)
+Listener::Listener(TcpConnectionCallback cb, NetWorker* owner_, int connectionLimit_)
   : TcpConnectionCreator(),
+    owner(owner_),
     listenfd(Socket::New(AddrFamily::IP4)),
-    listenChannel(ec, listenfd.Getfd()),
+    listenChannel(owner->GetEventCycle(), listenfd.Getfd()),
     connectedCallback(std::move(cb)),
-    eventCycle(ec),
     connectionLimit(connectionLimit_)
 {
     assert(connectedCallback);
@@ -85,8 +86,10 @@ void Listener::handleAccept()
                 acceptSock.Getfd(), localAddr.ToString().c_str(), remoteAddr.ToString().c_str());
 
     int acceptFd = acceptSock.Getfd();
+    // TODO apply conf
     TcpConnectionPtr conn = TcpConnection::New(std::move(acceptSock),
-                                                Channel(eventCycle, acceptFd),
-                                                false, this, localAddr, remoteAddr);
+                                                Channel(owner->GetEventCycle(), acceptFd),
+                                                false, this, localAddr, remoteAddr,
+                                                owner->GetTimer());
     connectedCallback(conn);
 }

@@ -5,8 +5,38 @@
 #include <ctime>
 
 #include "base/Utilities.h"
+#include "base/Manager.h"
 
-bool musketeer::ErrnoIgnorable(int n)
+namespace musketeer
+{
+
+const char* LogLevelStr[5] = { "DEBUG", "NOTICE", "WARN", "ALERT", "FATAL" };
+
+void logFormat(LogLevel level, const char* file, int line,
+                    const char* func, const char* fmt, ...)
+{
+    if(level < gManager.GetLogger().CurrentLevel())
+    {
+        return;
+    }
+
+    char prefix[CMaxLogPrefixLength];
+    // make prefix
+    std::snprintf(prefix, CMaxLogPrefixLength, " [%s] %s:%d %s: ",
+                    LogLevelStr[level], file, line, func);
+
+    char actualLog[CMaxLogLength];
+    va_list args;
+    va_start(args, fmt);
+    // make actual log
+    std::vsnprintf(actualLog, CMaxLogLength, fmt, args);
+    va_end(args);
+
+    gManager.GetLogger().Log(TimepointToString(Now()) +
+                                std::string(prefix) + std::string(actualLog));
+}
+
+bool ErrnoIgnorable(int n)
 {
     switch(n)
     {
@@ -24,7 +54,7 @@ bool musketeer::ErrnoIgnorable(int n)
     }
 }
 
-bool musketeer::WritevFd(int fd, std::list<Buffer>& bufferChain, int& savedErrno, bool& allSent)
+bool WritevFd(int fd, std::list<Buffer>& bufferChain, int& savedErrno, bool& allSent)
 {
     allSent = false;
     savedErrno = 0;
@@ -117,7 +147,7 @@ bool musketeer::WritevFd(int fd, std::list<Buffer>& bufferChain, int& savedErrno
     }
 }
 
-bool musketeer::WriteFd(int fd, Buffer& buffer, int& savedErrno, bool& allSent)
+bool WriteFd(int fd, Buffer& buffer, int& savedErrno, bool& allSent)
 {
     allSent = false;
     savedErrno = 0;
@@ -163,7 +193,7 @@ bool musketeer::WriteFd(int fd, Buffer& buffer, int& savedErrno, bool& allSent)
     }
 }
 
-bool musketeer::ReadFd(int fd, Buffer& buffer, int& savedErrno, bool& peerClosed)
+bool ReadFd(int fd, Buffer& buffer, int& savedErrno, bool& peerClosed)
 {
     savedErrno = 0;
     peerClosed = false;
@@ -202,7 +232,7 @@ bool musketeer::ReadFd(int fd, Buffer& buffer, int& savedErrno, bool& peerClosed
     }
 }
 
-std::string musketeer::TimepointToString(const Timepoint& tp)
+std::string TimepointToString(const Timepoint& tp)
 {
     // convert to time_t and call localtime to localise
     std::time_t t = std::chrono::system_clock::to_time_t(tp);
@@ -351,7 +381,8 @@ else
 }
 */
 
-void musketeer::onNewConnection(TcpConnectionPtr conn)
+void onNewConnection(TcpConnectionPtr conn)
 {
     LOG_DEBUG("new connection %p established", conn.get());
+}
 }

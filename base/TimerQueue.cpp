@@ -9,14 +9,14 @@ using namespace musketeer;
 using namespace std;
 using namespace std::placeholders;
 
-TimerPtr TimerQueue::NewTimer(int msec, TimerCallback cb, bool repeated)
+TimerPtr TimerQueue::NewTimer()
 {
     // if stack is empty emplace one new Timer object
     // deque itself will take care of its capacity
     if(indexes.empty())
     {
         int currSize = timersPool.size();
-        Timer& newTimer = timersPool.emplace_back(currSize);
+        Timer& newTimer = timersPool.emplace_back(currSize, this);
         indexes.push(currSize);
         LOG_DEBUG("Timer %p with index %d has been pushed into stack", &newTimer, currSize);
     }
@@ -26,10 +26,10 @@ TimerPtr TimerQueue::NewTimer(int msec, TimerCallback cb, bool repeated)
     LOG_DEBUG("index %d has been popped out of stack", i);
     // must be reference
     Timer& timer = timersPool.at(i);
-    timer.Set(msec, std::move(cb), repeated);
 
-    LOG_DEBUG("A in-pool Timer %p with index %d is set to be alarmed after %dms",
-                &timer, timer.Index(), msec);
+    timer.repeated = false;
+    timer.timedoutCallback = nullptr;
+
     return TimerPtr(&timer, std::bind(&TimerQueue::returnTimer, this, _1));
 }
 
@@ -79,11 +79,11 @@ void TimerQueue::Init()
         return;
     }
 
-    timerChannel.reset(new Channel(eventCycle, timerfd));
+    timerChannel.reset(new Channel(const_cast<EventCycle*>(eventCycle), timerfd));
 
     for(int i = 0; i < initCap; i++)
     {
-        Timer& timer = timersPool.emplace_back(i);
+        Timer& timer = timersPool.emplace_back(i, this);
         indexes.push(i);
         LOG_DEBUG("Timer %p with index %d has been pushed into stack", &timer, i);
     }
@@ -160,7 +160,7 @@ void TimerQueue::handleRead()
     timersSet.erase(timersSet.begin(), iter);
 }
 
-void TimerQueue::returnTimer(Timer* timer)
+void TimerQueue::returnTimer(const Timer* timer)
 {
     int index = timer->Index();
     LOG_DEBUG("A in-pool Timer %p with index %d is returned", timer, index);

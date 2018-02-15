@@ -23,9 +23,10 @@ bool Manager::CheckAndSet()
     for(unsigned int i = 0; i < thread::hardware_concurrency(); i++)
     {
         auto netWorker = make_unique<NetWorker>(onNewConnection, i);
-        if(!netWorker->CheckAndSet(InetAddr("127.0.0.1", 8000)))
+        // TODO apply conf !!!
+        if(!netWorker->CheckAndSet(InetAddr("127.0.0.1", 7000)))
         {
-            std::perror("NetWorker bind error :");
+            std::perror("NetWorker bind error");
             return false;
         }
 
@@ -38,12 +39,12 @@ bool Manager::CheckAndSet()
 void Manager::InitThreads()
 {
     // logger should be the first one
-    logger.InitThread(0);
+    logger.StartThread(0);
 
     // NetWorkers
     for(auto it = netWorkers.begin(); it != netWorkers.end(); it++)
     {
-        (*it)->InitThread();
+        (*it)->StartThread();
     }
 }
 

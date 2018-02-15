@@ -1,3 +1,5 @@
+#include <thread>
+
 #include "net/NetWorker.h"
 
 using namespace musketeer;
@@ -8,12 +10,27 @@ bool NetWorker::CheckAndSet(const InetAddr& localAddr)
     return listener.BindLocalAddr(localAddr);
 }
 
-void NetWorker::InitThread()
+void NetWorker::StartThread()
 {
-    workerThread.Start(true, index, [this](){ this->listener.Listen();});
+    taskQueue.Init();
+    timerQueue.Init();
+
+    workerThread.Start(index, [this](){ this->listener.Listen();});
 }
 
-void NetWorker::CreateUpstream(const InetAddr& addr, TcpConnectionCallback callback)
+void NetWorker::ConnectUpstream(const InetAddr& addr, TcpConnectionCallback callback)
 {
-    connector.Connect(addr, std::move(callback));
+    if(this_thread::get_id() == workerThread.ThreadId())
+    {
+        connector.Connect(addr, std::move(callback));
+    }
+    else
+    {
+        taskQueue.SendTask(
+            [=]()
+            {
+                connector.Connect(addr, std::move(callback));
+            }
+        );
+    }
 }

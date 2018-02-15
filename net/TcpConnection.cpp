@@ -175,7 +175,8 @@ void TcpConnection::handleError()
 
 TcpConnectionPtr TcpConnection::New(Socket sock, Channel chan, bool connecting,
                                     TcpConnectionCreator* creator,
-                                    const InetAddr& localAddr, const InetAddr& remoteAddr)
+                                    const InetAddr& localAddr, const InetAddr& remoteAddr,
+                                    TimerPtr timer)
 {
     LOG_DEBUG("%s TcpConnection %s -> %s on fd %d is created",
                 connecting ? "positive" : "negative",
@@ -183,7 +184,7 @@ TcpConnectionPtr TcpConnection::New(Socket sock, Channel chan, bool connecting,
                 connecting ? remoteAddr.ToString().c_str() : localAddr.ToString().c_str(),
                 sock.Getfd());
     return make_shared<TcpConnection>(std::move(sock), std::move(chan), connecting,
-                                        creator, localAddr, remoteAddr);
+                                        creator, localAddr, remoteAddr, std::move(timer));
 }
 
 /*void TcpConnection::writeBufChainStat(size_t& availSize, size_t& appendSize)

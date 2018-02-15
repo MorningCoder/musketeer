@@ -18,7 +18,7 @@ class Channel;
 class EventCycle
 {
 public:
-    explicit EventCycle(Poller::PollerType type)
+    explicit EventCycle(PollerType type)
         : poller(Poller::New(type)),
           stop(false)
     { }
@@ -30,6 +30,11 @@ public:
     EventCycle& operator=(const EventCycle&) = delete;
     EventCycle(EventCycle&&) = delete;
     EventCycle& operator=(EventCycle&&) = delete;
+
+    void Stop()
+    {
+        stop = true;
+    }
 
     void Loop();
 

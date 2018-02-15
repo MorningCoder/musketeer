@@ -9,6 +9,9 @@
 #include "net/Listener.h"
 #include "net/Connector.h"
 #include "base/Utilities.h"
+#include "base/TaskQueue.h"
+#include "base/TimerQueue.h"
+#include "base/CycleThread.h"
 
 namespace musketeer
 {
@@ -17,9 +20,11 @@ class NetWorker
 public:
     NetWorker(TcpConnectionCallback newConnCallback, int index_)
       : index(index_),
-        workerThread("net worker " + std::to_string(index), Poller::MEpoll),
-        listener(newConnCallback, workerThread.GetEventCycle(), CInputConnectionLimit),
-        connector(COutputConnectionLimit, workerThread.GetEventCycle())
+        workerThread("NetWorker " + std::to_string(index), PollerType::Epoll),
+        taskQueue(workerThread.GetEventCycle()),
+        timerQueue(CInputConnectionLimit/100, workerThread.GetEventCycle()),
+        listener(newConnCallback, this, CInputConnectionLimit),
+        connector(COutputConnectionLimit, this)
     { }
 
     ~NetWorker() = default;
@@ -29,17 +34,30 @@ public:
     NetWorker(NetWorker&&) = delete;
     NetWorker& operator=(NetWorker&&) = delete;
 
+    EventCycle* GetEventCycle() const
+    {
+        return workerThread.GetEventCycle();
+    }
+
+    TimerPtr GetTimer()
+    {
+        return timerQueue.NewTimer();
+    }
+
     // check bind
     bool CheckAndSet(const InetAddr&);
     // start thread, must be called after daemon()ed
-    void InitThread();
+    void StartThread();
 
     // the only interface for connection task, used to create a upstream connection
     // callback() will always be called to inform the result
-    void CreateUpstream(const InetAddr&, TcpConnectionCallback);
+    void ConnectUpstream(const InetAddr&, TcpConnectionCallback);
+
 private:
     int index;
     CycleThread workerThread;
+    TaskQueue taskQueue;
+    TimerQueue timerQueue;
     Listener listener;
     Connector connector;
 };

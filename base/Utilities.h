@@ -11,12 +11,12 @@
 #include <string>
 
 #include "base/Buffer.h"
-#include "base/Logger.h"
 
 namespace musketeer
 {
 
 class TcpConnection;
+class Timer;
 
 #define LOG_DEBUG(fmt, args...) \
     logFormat(LogLevel::Debug, __FILE__, __LINE__, __func__, fmt, ##args)
@@ -32,13 +32,20 @@ class TcpConnection;
 // const
 const int CInputConnectionLimit = 60000;
 const int COutputConnectionLimit = 30000;
+// max length of a line of logs in bytes
+const size_t CMaxLogLength = 2048;
+const size_t CMaxLogPrefixLength = 128;
 
 // enums
 
 enum TcpConnectionStatus {Established = 0, PeerClosed, Closed};
+enum LogLevel { Debug = 0, Notice, Warn, Alert, Fatal };
 
 // types
+typedef std::function<void()> Task;
 typedef std::shared_ptr<TcpConnection> TcpConnectionPtr;
+// define Timer's deleter
+typedef std::unique_ptr<Timer, std::function<void(Timer*)>> TimerPtr;
 typedef std::chrono::system_clock::time_point Timepoint;
 typedef std::chrono::duration<int, std::milli> TimeDuration;
 
@@ -48,6 +55,8 @@ typedef std::function<void(TcpConnectionPtr, Buffer*)> TcpConnectionReadCallback
 typedef std::function<void()> EventCallback;
 
 // some utility functions
+
+void logFormat(LogLevel, const char*, int, const char*, const char*, ...);
 
 // check if errno is ignorable
 bool ErrnoIgnorable(int);

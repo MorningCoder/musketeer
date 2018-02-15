@@ -3,38 +3,9 @@
 #include <functional>
 
 #include "base/Logger.h"
-#include "base/Manager.h"
 
 using namespace std;
-
-namespace musketeer
-{
-
-const char* LogLevelStr[5] = { "DEBUG", "NOTICE", "WARN", "ALERT", "FATAL" };
-
-void logFormat(LogLevel level, const char* file, int line,
-                    const char* func, const char* fmt, ...)
-{
-    if(level < gManager.GetLogger().CurrentLevel())
-    {
-        return;
-    }
-
-    char prefix[CMaxLogPrefixLength];
-    // make prefix
-    std::snprintf(prefix, CMaxLogPrefixLength, " [%s] %s:%d %s: ",
-                    LogLevelStr[level], file, line, func);
-
-    char actualLog[CMaxLogLength];
-    va_list args;
-    va_start(args, fmt);
-    // make actual log
-    std::vsnprintf(actualLog, CMaxLogLength, fmt, args);
-    va_end(args);
-
-    gManager.GetLogger().Log(TimepointToString(Now()) +
-                                std::string(prefix) + std::string(actualLog));
-}
+using namespace musketeer;
 
 bool Logger::CheckAndSet(LogLevel level, std::string name)
 {
@@ -53,7 +24,7 @@ bool Logger::CheckAndSet(LogLevel level, std::string name)
     return true;
 }
 
-void Logger::InitThread(int index)
+void Logger::StartThread(int index)
 {
     // CheckAndSet() must have been called
     if(!(logFile = std::fopen(logFileName.c_str(), "a")))
@@ -62,9 +33,10 @@ void Logger::InitThread(int index)
         std::abort();
     }
 
-    inited = true;
+    taskQueue.Init();
+    logThread.Start(index);
 
-    logThread.Start(true, index);
+    inited = true;
 }
 
 void Logger::Log(const string& str)
@@ -81,10 +53,10 @@ void Logger::Log(const string& str)
     }
     else
     {
-        logThread.SendNotify(
+        taskQueue.SendTask(
             [=]()
             {
-                this->log(str);
+                log(str);
             }
         );
     }
@@ -94,5 +66,4 @@ void Logger::log(const std::string& str) const
 {
     ::fprintf(logFile, "%s\n", str.c_str());
     ::fflush(logFile);
-}
 }

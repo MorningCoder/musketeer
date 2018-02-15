@@ -116,12 +116,7 @@ public:
     }
 
     // Close() move this channel out of epoll, at well as out of EventCycle
-    void Close()
-    {
-        events = CNEVENT;
-        closed = true;
-        remove();
-    }
+    void Close();
 
     void SetREvents(int revents_)
     {

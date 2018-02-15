@@ -18,10 +18,10 @@
 namespace musketeer
 {
 
-// define Timer's deleter
-typedef std::unique_ptr<Timer, std::function<void(Timer*)>> TimerPtr;
 // TimerEntry make it easy to find Timer object in timersSet
 typedef std::pair<Timepoint, const Timer*> TimerEntry;
+
+class Timer;
 
 class TimerQueue
 {
@@ -48,23 +48,23 @@ public:
     }
 
     // factory method to create a new Timer
-    TimerPtr NewTimer(int, TimerCallback, bool);
+    TimerPtr NewTimer();
     // activate a new Timer
     void AddTimer(const Timer*);
     // cancel a existing Timer, does nothing if Timer doesn't exist
     void CancelTimer(const Timer*);
-    // called by CycleThread to initiate everything
+    // called by owner to initiate everything
     void Init();
 private:
     // return Timer to object pool
-    void returnTimer(Timer* timer);
+    void returnTimer(const Timer* timer);
     // reset the earliest timedout point of timerfd and new interval calculated by it
     void resetTimerfd(Timepoint);
     // callback for timerfd's read event
     void handleRead();
 
     // EventCycle to which this TimerQueue belongs
-    EventCycle* eventCycle;
+    const EventCycle* eventCycle;
     // flag marking wether timerfd_settime() has been called
     bool armed;
     // timerfd

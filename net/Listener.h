@@ -19,11 +19,12 @@ namespace musketeer
 {
 
 class EventCycle;
+class NetWorker;
 
 class Listener : public TcpConnectionCreator
 {
 public:
-    Listener(TcpConnectionCallback, EventCycle*, int);
+    Listener(TcpConnectionCallback, NetWorker*, int);
     ~Listener() final
     {
         assert(listenfd.Valid());
@@ -37,14 +38,14 @@ private:
     // read event handler for listenfd
     void handleAccept();
 
+    // owner worker
+    NetWorker* owner;
     // fd only for listening
     Socket listenfd;
     // listenChannel must belong to different EventCycle
     Channel listenChannel;
     // this will be called once a connection is accepted and established
     TcpConnectionCallback connectedCallback;
-    EventCycle* eventCycle;
-
     // connection number limit set by configure file
     // this is a number that is divided by number of threads
     // because we assume reuseport has balanced all the connections

@@ -12,12 +12,16 @@ namespace musketeer
 
 typedef std::function<void()> TimerCallback;
 
+class TimerQueue;
+
 class Timer
 {
+friend class TimerQueue;
 public:
-    // a default Timer is insignificant which should be Set()ed after constructed
-    Timer(int index_)
+    // a default Timer is insignificant which should be Reset()ed after constructed
+    Timer(const int index_, TimerQueue* owner_)
       : index(index_),
+        owner(owner_),
         repeated(false),
         timedoutPoint(),
         timedoutDuration(),
@@ -28,6 +32,7 @@ public:
 
     ~Timer()
     {
+        timedoutCallback = nullptr;
         LOG_DEBUG("Timer %p with index %d destroyed", this, index);
     }
 
@@ -37,20 +42,6 @@ public:
         {
             timedoutCallback();
         }
-    }
-
-    void Set(int msec, TimerCallback cb, bool repeated_)
-    {
-        repeated = repeated_;
-        timedoutPoint = Now() + std::chrono::duration<int, std::milli>(msec);
-        timedoutDuration = TimeDuration(msec);
-        timedoutCallback = std::move(cb);
-    }
-
-    // update timedoutPoint
-    void Update()
-    {
-        timedoutPoint = Now() + timedoutDuration;
     }
 
     int Index() const
@@ -68,9 +59,16 @@ public:
         return repeated;
     }
 
+    void Reset(int msec, TimerCallback cb, bool repeated_);
+    void Update();
+    void Add();
+    void Cancel();
+
 private:
     // index from TimerQueue
     const int index;
+    // owner TimerQueue
+    TimerQueue* owner;
     // true if this Timer needs to be reported repeatedly
     bool repeated;
     // absolute time point which uses system_clock, used for comparsion

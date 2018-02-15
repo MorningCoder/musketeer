@@ -30,6 +30,11 @@ public:
     {
         return logger;
     }
+
+    NetWorker& GetNetWorker()
+    {
+        return *netWorkers[0];
+    }
 private:
     // threads
     Logger logger;

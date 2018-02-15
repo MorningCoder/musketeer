@@ -10,26 +10,24 @@
 #include <cassert>
 
 #include "base/CycleThread.h"
+#include "base/TaskQueue.h"
+#include "base/Utilities.h"
 
 namespace musketeer
 {
-// max length of a line of logs in bytes
-const size_t CMaxLogLength = 2048;
-const size_t CMaxLogPrefixLength = 128;
-enum LogLevel { Debug = 0, Notice, Warn, Alert, Fatal };
-
-void logFormat(LogLevel, const char*, int, const char*, const char*, ...);
-
 class Logger
 {
 public:
     Logger()
       : logFileName(),
         logFile(nullptr),
-        logThread("logging", Poller::MEpoll),
+        logThread("Logger", PollerType::Epoll),
+        taskQueue(logThread.GetEventCycle()),
         currLevel(LogLevel::Debug),
         inited(false)
-    { }
+    {
+        assert(logThread.GetEventCycle());
+    }
 
     ~Logger()
     {
@@ -48,7 +46,8 @@ public:
     // used for checking conf, must be called before daemon()ed
     bool CheckAndSet(LogLevel, std::string);
     // start thread, must be called after daemon()ed
-    void InitThread(int);
+    void StartThread(int);
+
     // the only logging interface
     void Log(const std::string&);
 
@@ -62,10 +61,12 @@ private:
     std::FILE* logFile;
     // logging thread
     CycleThread logThread;
+    // task queue owned by this logger thread
+    TaskQueue taskQueue;
     // only print logs of which level is greater than currLevel
     LogLevel currLevel;
     // must be atomic because multiple threads may access
-    std::atomic_bool inited;
+    std::atomic<bool> inited;
 };
 }
 

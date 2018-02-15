@@ -11,6 +11,7 @@
 #include "base/Buffer.h"
 #include "base/Utilities.h"
 #include "net/InetAddr.h"
+#include "base/TimerQueue.h"
 
 namespace musketeer
 {
@@ -22,7 +23,7 @@ class TcpConnection : public std::enable_shared_from_this<TcpConnection>
 {
 public:
     TcpConnection(Socket sock, Channel chan, bool connected, TcpConnectionCreator* c,
-                    const InetAddr& localAddr_, const InetAddr& remoteAddr_,
+                    const InetAddr& localAddr_, const InetAddr& remoteAddr_, TimerPtr timer_,
                     size_t wbufsize = CDefaultWriteBufferSize)
       : connfd(std::move(sock)),
         channel(std::move(chan)),
@@ -36,6 +37,7 @@ public:
         readBuf(nullptr),
         localAddr(localAddr_),
         remoteAddr(remoteAddr_),
+        timer(std::move(timer_)),
         creator(c)
     {
         assert(connfd.Valid());
@@ -91,7 +93,7 @@ public:
 
     // factory method, the only interface to create TcpConnection
     static TcpConnectionPtr New(Socket, Channel, bool, TcpConnectionCreator*,
-                                    const InetAddr&, const InetAddr&);
+                                    const InetAddr&, const InetAddr&, TimerPtr);
 
 private:
     // two internal functions to deal read/write events
@@ -128,6 +130,8 @@ private:
     // address info
     InetAddr localAddr;
     InetAddr remoteAddr;
+    // timer
+    TimerPtr timer;
     // a reference to its creator Listener
     TcpConnectionCreator* creator;
 };
