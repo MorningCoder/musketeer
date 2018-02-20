@@ -3,15 +3,11 @@
 
 using namespace musketeer;
 
-Poller::~Poller()
-{
-}
-
-Poller* Poller::New(PollerType t)
+std::unique_ptr<Poller> Poller::New(PollerType t)
 {
     //if(t == Poller::MEpoll)
     {
-        return new EpollPoller();
+        return std::unique_ptr<Poller>(new EpollPoller());
     }
     /*else if(t == Poller::MPoll)
     {

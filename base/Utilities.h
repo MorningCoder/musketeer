@@ -17,6 +17,7 @@ namespace musketeer
 
 class TcpConnection;
 class Timer;
+class Channel;
 
 #define LOG_DEBUG(fmt, args...) \
     logFormat(LogLevel::Debug, __FILE__, __LINE__, __func__, fmt, ##args)
@@ -43,6 +44,9 @@ enum LogLevel { Debug = 0, Notice, Warn, Alert, Fatal };
 
 // types
 typedef std::function<void()> Task;
+// Channel can be used both by its owner and EventCycle, so it should be shared
+typedef std::shared_ptr<Channel> ChannelPtr;
+typedef std::weak_ptr<Channel> WeakChannelPtr;
 typedef std::shared_ptr<TcpConnection> TcpConnectionPtr;
 // define Timer's deleter
 typedef std::unique_ptr<Timer, std::function<void(Timer*)>> TimerPtr;

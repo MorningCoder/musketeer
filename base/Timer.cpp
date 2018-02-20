@@ -3,26 +3,36 @@
 
 using namespace musketeer;
 
-void Timer::Reset(int msec, TimerCallback cb, bool repeated_)
+void Timer::Reset(TimerCallback cb, bool repeat)
 {
-    repeated = repeated_;
-    timedoutPoint = Now() + std::chrono::duration<int, std::milli>(msec);
-    timedoutDuration = TimeDuration(msec);
     timedoutCallback = std::move(cb);
+    repeated = repeat;
 }
 
-// update timedoutPoint
+void Timer::Update(int msec)
+{
+    timedoutDuration = TimeDuration(msec);
+    timedoutPoint = Now() + timedoutDuration;
+}
+
 void Timer::Update()
 {
+    assert(timedoutDuration.count() != 0);
     timedoutPoint = Now() + timedoutDuration;
 }
 
 void Timer::Add()
 {
+    assert(!set);
     owner->AddTimer(this);
+    set = true;
 }
 
 void Timer::Cancel()
 {
-    owner->CancelTimer(this);
+    if(set)
+    {
+        owner->CancelTimer(this);
+        set = false;
+    }
 }

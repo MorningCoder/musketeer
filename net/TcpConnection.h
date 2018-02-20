@@ -12,6 +12,7 @@
 #include "base/Utilities.h"
 #include "net/InetAddr.h"
 #include "base/TimerQueue.h"
+#include "base/WeakCallback.h"
 
 namespace musketeer
 {
@@ -22,8 +23,9 @@ class TcpConnectionCreator;
 class TcpConnection : public std::enable_shared_from_this<TcpConnection>
 {
 public:
-    TcpConnection(Socket sock, Channel chan, bool connected, TcpConnectionCreator* c,
-                    const InetAddr& localAddr_, const InetAddr& remoteAddr_, TimerPtr timer_,
+    TcpConnection(Socket sock, ChannelPtr chan, bool connected, TcpConnectionCreator* c,
+                    const InetAddr& localAddr_, const InetAddr& remoteAddr_,
+                    TimerPtr readTimer_, TimerPtr writeTimer_,
                     size_t wbufsize = CDefaultWriteBufferSize)
       : connfd(std::move(sock)),
         channel(std::move(chan)),
@@ -37,18 +39,18 @@ public:
         readBuf(nullptr),
         localAddr(localAddr_),
         remoteAddr(remoteAddr_),
-        timer(std::move(timer_)),
+        readTimer(std::move(readTimer_)),
+        writeTimer(std::move(writeTimer_)),
         creator(c)
     {
         assert(connfd.Valid());
-        channel.SetErrorCallback(std::bind(&TcpConnection::handleError, this));
-        channel.SetReadCallback(std::bind(&TcpConnection::handleRead, this));
-        channel.SetWriteCallback(std::bind(&TcpConnection::handleWrite, this));
+        LOG_DEBUG("%p is constructed", this);
     }
 
     ~TcpConnection()
     {
         Close();
+        LOG_DEBUG("%p is destroyed", this);
     }
 
     // not copyable nor movable
@@ -77,29 +79,35 @@ public:
         return remoteAddr;
     }
 
+    // initialise this connection, including register channel and set callbacks
+    void Init();
+
+    // close this connection, including close channel and socket
     void Close();
 
-    void SetReadCallback(TcpConnectionReadCallback cb, Buffer* buf);
+    // set read callback and timedout msecs, new data will be appended into buf
+    void SetReadCallback(TcpConnectionReadCallback, Buffer*, int);
 
     // Send() tries to send all the data inside writeBuf
     // if write event is not set, Send() will try to call send() first,
     // and then add the event for futher writing operation if necessary
     // writeFinishedCallback will be called after write operation is done
     // writeFinishedCallback will be called immediately if writeBuf is empty
-    void Send(TcpConnectionCallback cb);
+    void Send(TcpConnectionCallback, int);
     // require a write buffer to append data by caller
     // will allocate one if there is no available ones
     Buffer* GetWriteableBuffer();
 
     // factory method, the only interface to create TcpConnection
-    static TcpConnectionPtr New(Socket, Channel, bool, TcpConnectionCreator*,
-                                    const InetAddr&, const InetAddr&, TimerPtr);
+    static TcpConnectionPtr New(Socket, ChannelPtr, bool, TcpConnectionCreator*,
+                                    const InetAddr&, const InetAddr&, TimerPtr, TimerPtr);
 
 private:
-    // two internal functions to deal read/write events
     void handleRead();
     void handleWrite();
     void handleError();
+    void handleReadTimedout();
+    void handleWriteTimedout();
     // get write buffer statistics data
     //void writeBufChainStat(size_t&, size_t&);
 
@@ -111,7 +119,7 @@ private:
     // socket returned from accept() or connect()
     Socket connfd;
     // channel bound to this socket
-    Channel channel;
+    ChannelPtr channel;
     // a flag indicating wether this connection is used as client or a server
     bool positive;
     // only 3 statuses
@@ -130,8 +138,9 @@ private:
     // address info
     InetAddr localAddr;
     InetAddr remoteAddr;
-    // timer
-    TimerPtr timer;
+    // timers and timedout
+    TimerPtr readTimer;
+    TimerPtr writeTimer;
     // a reference to its creator Listener
     TcpConnectionCreator* creator;
 };

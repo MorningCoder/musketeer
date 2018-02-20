@@ -9,6 +9,7 @@
 #define MUSKETEER_EVENT_CHANNEL_H
 
 #include <functional>
+#include <memory>
 #include <cassert>
 
 #include "event/EventCycle.h"
@@ -23,10 +24,9 @@ namespace musketeer
 // Removed means this channel is temporarily removed out of epoll
 // but is still under EventCycle's managment
 // Set means this channel is currently in epoll
-// Invalid means this channel was just std::move()ed and not valid any more
-enum ChannelStatus { New = 0, Set, Removed, Invalid };
+enum ChannelStatus { New = 0, Set, Removed };
 
-class Channel
+class Channel : public std::enable_shared_from_this<Channel>
 {
 public:
     Channel(EventCycle* ec, int fd_)
@@ -35,12 +35,9 @@ public:
           eventCycle(ec),
           events(0),
           revents(0),
-          isReading(false),
-          isWriting(false),
           closed(false)
     {
         LOG_DEBUG("Channel %p constructed", this);
-        eventCycle->RegisterChannel(this);
         /*
         events |= CEEVENT;
         update();
@@ -49,43 +46,27 @@ public:
 
     ~Channel()
     {
-        if(Status != ChannelStatus::Invalid && !closed)
+        if(!closed)
         {
             Close();
-            LOG_DEBUG("Channel %p closed", this);
         }
 
         LOG_DEBUG("Channel %p destroyed", this);
     }
 
-    // only support move constructor
-    Channel(Channel&& other)
-      : Status(other.Status),
-        fd(other.fd),
-        eventCycle(other.eventCycle),
-        events(other.events),
-        revents(other.revents),
-        isReading(other.isReading),
-        isWriting(other.isWriting),
-        closed(other.closed),
-        readCallback(std::move(other.readCallback)),
-        writeCallback(std::move(other.writeCallback)),
-        errorCallback(std::move(other.errorCallback))
-    {
-        LOG_DEBUG("Channel %p move constructed from %p", this, &other);
-        other.closed = true;
-        other.Status = ChannelStatus::Invalid;
-    }
-
-    // do not support copy assignment
+    Channel(Channel&& other) = delete;
     Channel& operator=(Channel&& other) = delete;
-
-    // not copyable
     Channel(const Channel&) = delete;
     Channel& operator=(const Channel&) = delete;
 
+    void Register()
+    {
+        eventCycle->RegisterChannel(shared_from_this());
+    }
+
     void EnableReading()
     {
+        assert(readCallback);
         events |= CREVENT;
         update();
     }
@@ -98,6 +79,7 @@ public:
 
     void EnableWriting()
     {
+        assert(writeCallback);
         events |= CWEVENT;
         update();
     }
@@ -135,17 +117,31 @@ public:
 
     bool IsReading() const
     {
-        return isReading;
+        // readCallback must exist if read event is set
+        assert((events & CREVENT) ? (bool)readCallback : true);
+        return (events & CREVENT);
     }
 
     bool IsWriting() const
     {
-        return isWriting;
+        // writeCallback must exist if write event is set
+        assert((events & CWEVENT) ? (bool)writeCallback : true);
+        return (events & CWEVENT);
+    }
+
+    bool IsClosed() const
+    {
+        return closed;
     }
 
     int Getfd() const
     {
         return fd;
+    }
+
+    WeakChannelPtr WeakFromThis()
+    {
+        return weak_from_this();
     }
 
     void SetReadCallback(EventCallback cb)
@@ -161,6 +157,36 @@ public:
     void SetErrorCallback(EventCallback cb)
     {
         errorCallback = std::move(cb);
+    }
+
+    void UnsetReadCallback()
+    {
+        readCallback = nullptr;
+    }
+
+    void UnsetWriteCallback()
+    {
+        writeCallback = nullptr;
+    }
+
+    void UnsetErrorCallback()
+    {
+        errorCallback = nullptr;
+    }
+
+    bool IsReadCallbackSet() const
+    {
+        return (bool)readCallback;
+    }
+
+    bool IsWriteCallbackSet() const
+    {
+        return (bool)writeCallback;
+    }
+
+    bool IsErrorCallbackSet() const
+    {
+        return (bool)errorCallback;
     }
 
     // called each time poller returns
@@ -185,15 +211,13 @@ private:
     // only a reference to fd
     const int fd;
     // only a reference to EventCycle
-    EventCycle* eventCycle;
+    EventCycle* const eventCycle;
 
     // events that are currently set and to be watched
     unsigned int events;
     // events that are returned by poller
     unsigned int revents;
 
-    bool isReading;
-    bool isWriting;
     bool closed;
 
     // read and write event handler

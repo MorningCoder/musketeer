@@ -19,11 +19,11 @@ public:
     void UpdateChannel(Channel*) final;
     void RemoveChannel(Channel*) final;
 
-    void Poll(std::vector<Channel*>&, int) final;
+    void Poll(std::vector<WeakChannelPtr>&, int) final;
 
 private:
     // used at each time epoll returns to transform epoll_events into channels
-    void fillCurrentChannels(std::vector<Channel*>&, int);
+    void fillCurrentChannels(std::vector<WeakChannelPtr>&, int);
     // transform EPOLL* into CREVENT and CWEVENT
     int generaliseEvents(int);
     // transform CREVENT and CWEVENT into EPOLL*

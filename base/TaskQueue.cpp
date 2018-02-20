@@ -30,6 +30,7 @@ void TaskQueue::Init()
 
     assert(!eventfdChan);
     eventfdChan.reset(new Channel(const_cast<EventCycle*>(eventCycle), eventFd));
+    eventfdChan->Register();
 
     eventfdChan->SetReadCallback(std::bind(&TaskQueue::handleRead, this));
     eventfdChan->EnableReading();

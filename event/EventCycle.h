@@ -9,12 +9,10 @@
 #include <unordered_map>
 
 #include "event/Poller.h"
+#include "base/Utilities.h"
 
 namespace musketeer
 {
-
-class Channel;
-
 class EventCycle
 {
 public:
@@ -38,23 +36,23 @@ public:
 
     void Loop();
 
-    // update channel's events
-    void UpdateChannel(Channel*);
-    // remove channel out of EventCycle's managment
+    // remove channel out of EventCycle's control, also out of epoll if existing
     void RemoveChannel(Channel*);
     // disable all events in this channel but
     // this channel remains to be under EventCycle's control
     void DisableChannel(Channel*);
     // add channel into allChannelsMap but do not modify its inside poller
-    void RegisterChannel(Channel*);
+    void RegisterChannel(ChannelPtr);
+    // update channel's events, will be added to epoll if not existing
+    void UpdateChannel(ChannelPtr);
 
 private:
     static const int loopTimeout = 1000;
 
     // store active channels each time poller returns
-    std::vector<Channel*> currentChannels;
+    std::vector<WeakChannelPtr> currentChannels;
     // store all channels that are registered in this EventCycle
-    std::unordered_map<int, Channel*> allChannelsMap;
+    std::unordered_map<int, ChannelPtr> allChannelsMap;
     // epoll or other events mutiplexers
     std::unique_ptr<Poller> poller;
     // a signal indicating the EventCycle should be stopped

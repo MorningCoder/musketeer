@@ -43,7 +43,7 @@ private:
     // fd only for listening
     Socket listenfd;
     // listenChannel must belong to different EventCycle
-    Channel listenChannel;
+    ChannelPtr listenChannel;
     // this will be called once a connection is accepted and established
     TcpConnectionCallback connectedCallback;
     // connection number limit set by configure file

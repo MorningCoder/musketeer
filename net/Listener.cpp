@@ -13,7 +13,7 @@ Listener::Listener(TcpConnectionCallback cb, NetWorker* owner_, int connectionLi
   : TcpConnectionCreator(),
     owner(owner_),
     listenfd(Socket::New(AddrFamily::IP4)),
-    listenChannel(owner->GetEventCycle(), listenfd.Getfd()),
+    listenChannel(new Channel(owner->GetEventCycle(), listenfd.Getfd())),
     connectedCallback(std::move(cb)),
     connectionLimit(connectionLimit_)
 {
@@ -21,9 +21,11 @@ Listener::Listener(TcpConnectionCallback cb, NetWorker* owner_, int connectionLi
 
     if(!listenfd.Valid())
     {
-        std::perror("listenfd is invalid :");
+        std::perror("listenfd is invalid");
         std::abort();
     }
+
+    listenChannel->Register();
 }
 
 bool Listener::BindLocalAddr(const InetAddr& addr)
@@ -43,8 +45,8 @@ bool Listener::BindLocalAddr(const InetAddr& addr)
 void Listener::Listen()
 {
     listenfd.Listen();
-    listenChannel.SetReadCallback(std::bind(&Listener::handleAccept, this));
-    listenChannel.EnableReading();
+    listenChannel->SetReadCallback(std::bind(&Listener::handleAccept, this));
+    listenChannel->EnableReading();
 }
 
 void Listener::handleAccept()
@@ -88,8 +90,9 @@ void Listener::handleAccept()
     int acceptFd = acceptSock.Getfd();
     // TODO apply conf
     TcpConnectionPtr conn = TcpConnection::New(std::move(acceptSock),
-                                                Channel(owner->GetEventCycle(), acceptFd),
+                                                make_shared<Channel>(owner->GetEventCycle(),
+                                                                        acceptFd),
                                                 false, this, localAddr, remoteAddr,
-                                                owner->GetTimer());
+                                                owner->GetTimer(), owner->GetTimer());
     connectedCallback(conn);
 }

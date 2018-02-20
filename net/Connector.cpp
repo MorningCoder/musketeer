@@ -4,37 +4,44 @@
 #include "net/Connector.h"
 #include "net/TcpConnection.h"
 #include "net/NetWorker.h"
+#include "base/WeakCallback.h"
 
 using namespace musketeer;
 using namespace std;
 
-ConnectState::ConnectState(Socket socket_, Channel channel_,
-                TcpConnectionCallback cb, Connector* connector_)
+ConnectState::ConnectState(Socket socket_, TcpConnectionCallback cb, Connector* connector_)
   : connector(connector_),
     timer(connector->owner->GetTimer()),
     socket(std::move(socket_)),
-    channel(std::move(channel_)),
+    channel(new Channel(connector->owner->GetEventCycle(), socket.Getfd())),
     callback(std::move(cb)),
     finalised(false),
     retries(0)
 {
+    LOG_DEBUG("%p is constructed", this);
+
+    channel->Register();
+}
+
+ConnectState::~ConnectState()
+{
+    LOG_DEBUG("%p is destroyed", this);
 }
 
 void ConnectState::trace()
 {
-    channel.SetWriteCallback(std::bind(&ConnectState::handleWrite, shared_from_this()));
-    channel.SetErrorCallback(std::bind(&ConnectState::handleError, shared_from_this()));
+    channel->SetWriteCallback(MakeWeakCallback(&ConnectState::handleWrite, weak_from_this()));
+    channel->SetErrorCallback(MakeWeakCallback(&ConnectState::handleError, weak_from_this()));
 
     if(timer->Repeated())
     {
-        // only retry() will set repeated and never Cancel()
-        timer->Cancel();
+        // only retry() will set repeated, and trace do not need repeat
+        // TODO apply param with conf
+        timer->SetRepeated(false);
+        timer->Update();
     }
-    // TODO apply param with conf
-    timer->Reset(3000, std::bind(&ConnectState::handleTimedout, shared_from_this()), false);
-    timer->Add();
 
-    channel.EnableWriting();
+    channel->EnableWriting();
 }
 
 void ConnectState::retry(int msec)
@@ -47,7 +54,9 @@ void ConnectState::retry(int msec)
 
     if(!timer->Repeated())
     {
-        timer->Reset(msec, std::bind(&ConnectState::handleTimedout, shared_from_this()), true);
+        timer->Reset(MakeWeakCallback(&ConnectState::handleTimedout, weak_from_this()), true);
+        timer->Update(msec);
+
         timer->Add();
     }
 }
@@ -115,7 +124,10 @@ void ConnectState::finalise(int err, bool retryOverLimit, bool timedout)
     assert(err >= 0);
     int fd = socket.Getfd();
 
+    TcpConnectionPtr newConn = nullptr;
+
     timer->Cancel();
+    channel->DisableAll();
 
     if(retryOverLimit)
     {
@@ -123,8 +135,6 @@ void ConnectState::finalise(int err, bool retryOverLimit, bool timedout)
         LOG_WARN("retrying connection to %s on fd %d for over 3 times, callback as failure",
                     socket.GetRemoteAddr().ToString().c_str(), fd);
         connector->DecreaseConnectionNum();
-        channel.Close();
-        callback(nullptr);
     }
     else if(timedout)
     {
@@ -132,16 +142,12 @@ void ConnectState::finalise(int err, bool retryOverLimit, bool timedout)
         LOG_WARN("found connection to %s on fd %d timedout, callback as failure",
                     socket.GetRemoteAddr().ToString().c_str(), fd);
         connector->DecreaseConnectionNum();
-        channel.Close();
-        callback(nullptr);
     }
     else if(err)
     {
         LOG_WARN("found connection to %s failed on fd %d, errno was %d",
                     socket.GetRemoteAddr().ToString().c_str(), fd, err);
         connector->DecreaseConnectionNum();
-        channel.Close();
-        callback(nullptr);
     }
     else
     {
@@ -149,11 +155,14 @@ void ConnectState::finalise(int err, bool retryOverLimit, bool timedout)
         InetAddr remoteAddr = socket.GetRemoteAddr();
         LOG_DEBUG("connection to %s succeeded on fd %d", remoteAddr.ToString().c_str(), fd);
         // work passed from itself to TcpConnection TODO apply conf
-        TcpConnectionPtr newConn = TcpConnection::New(std::move(socket), std::move(channel),
-                                                    true, connector, localAddr, remoteAddr,
-                                                    connector->owner->GetTimer());
-        callback(newConn);
+        newConn = TcpConnection::New(std::move(socket), std::move(channel),
+                                        true, connector, localAddr, remoteAddr,
+                                        connector->owner->GetTimer(),
+                                        connector->owner->GetTimer());
     }
+
+    callback(newConn);
+
     // destroy THIS connState obj
     finalised = true;
     connector->connections.erase(fd);
@@ -212,8 +221,7 @@ void Connector::Connect(const InetAddr& remoteAddr, TcpConnectionCallback cb)
     if(ret >= 0)
     {
         shared_ptr<ConnectState> connStatePtr(new ConnectState(std::move(connsock),
-                                                            Channel(owner->GetEventCycle(), fd),
-                                                            std::move(cb), this));
+                                                                std::move(cb), this));
         connStatePtr->Check(ret);
     }
     else

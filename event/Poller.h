@@ -5,25 +5,26 @@
 
 #include <vector>
 
+#include "base/Utilities.h"
+
 namespace musketeer
 {
 
 enum PollerType {Epoll, Poll};
 
-class Channel;
-
 class Poller
 {
 public:
     Poller() = default;
-    virtual ~Poller();
-
-    static Poller* New(PollerType type);
+    virtual ~Poller()
+    { }
 
     virtual void UpdateChannel(Channel*) = 0;
     virtual void RemoveChannel(Channel*) = 0;
 
-    virtual void Poll(std::vector<Channel*>&, int) = 0;
+    virtual void Poll(std::vector<WeakChannelPtr>&, int) = 0;
+
+    static std::unique_ptr<Poller> New(PollerType t);
 };
 }
 

@@ -23,6 +23,7 @@ public:
       : index(index_),
         owner(owner_),
         repeated(false),
+        set(false),
         timedoutPoint(),
         timedoutDuration(),
         timedoutCallback()
@@ -33,15 +34,14 @@ public:
     ~Timer()
     {
         timedoutCallback = nullptr;
+        Cancel();
+
         LOG_DEBUG("Timer %p with index %d destroyed", this, index);
     }
 
     void ProcessTimedout() const
     {
-        if(timedoutCallback)
-        {
-            timedoutCallback();
-        }
+        timedoutCallback();
     }
 
     int Index() const
@@ -59,9 +59,20 @@ public:
         return repeated;
     }
 
-    void Reset(int msec, TimerCallback cb, bool repeated_);
+    void SetRepeated(bool on)
+    {
+        repeated = on;
+    }
+
+    // reset callback and repeated flag
+    void Reset(TimerCallback, bool);
+    // update timedout point to Now() + given msecs
+    // default (no args) version will use timedoutDuration
+    void Update(int);
     void Update();
+    // add this timer into timer queue, this timer must not exist before
     void Add();
+    // remove this timer out of timer queue, do nothing if doesn't exist
     void Cancel();
 
 private:
@@ -71,6 +82,8 @@ private:
     TimerQueue* owner;
     // true if this Timer needs to be reported repeatedly
     bool repeated;
+    // true if this Timer is now in TimerQueue
+    bool set;
     // absolute time point which uses system_clock, used for comparsion
     Timepoint timedoutPoint;
     // relative duration used for repeated Timer

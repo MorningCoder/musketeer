@@ -11,6 +11,7 @@
 #include <mutex>
 #include <unistd.h>
 
+#include "base/Utilities.h"
 #include "event/Channel.h"
 
 namespace musketeer
@@ -43,7 +44,7 @@ private:
     // event fd
     int eventFd;
     // event fd channel
-    std::unique_ptr<Channel> eventfdChan;
+    ChannelPtr eventfdChan;
     // task queue lock
     std::mutex mtx;
     // queue

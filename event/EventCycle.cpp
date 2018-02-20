@@ -12,34 +12,24 @@ void EventCycle::Loop()
         currentChannels.clear();
         poller->Poll(currentChannels, loopTimeout);
 
-        for(Channel* channel : currentChannels)
+        for(auto it = currentChannels.begin(); it != currentChannels.end(); it++)
         {
-            channel->ProcessEvents();
+            ChannelPtr channel = it->lock();
+            if(channel)
+            {
+                channel->ProcessEvents();
+            }
+            else
+            {
+                LOG_NOTICE("A caller was destroyed before, callbacks will not be invoked");
+            }
         }
-
-        // TODO add timer events
     }
-}
-
-void EventCycle::UpdateChannel(Channel* channel)
-{
-    LOG_DEBUG("channel %p status %d fd %d updated",
-                channel, channel->Status, channel->Getfd());
-
-    if(channel->Status == ChannelStatus::New)
-    {
-        // must not exist
-        assert(allChannelsMap.find(channel->Getfd()) == allChannelsMap.end());
-
-        allChannelsMap[channel->Getfd()] = channel;
-    }
-
-    poller->UpdateChannel(channel);
 }
 
 void EventCycle::RemoveChannel(Channel* channel)
 {
-    LOG_DEBUG("channel %p status %d fd %d removed",
+    LOG_DEBUG("channel %p with status %d fd %d removed",
                 channel, channel->Status, channel->Getfd());
 
     assert(channel->Status != ChannelStatus::New);
@@ -48,14 +38,14 @@ void EventCycle::RemoveChannel(Channel* channel)
     {
         poller->RemoveChannel(channel);
     }
-    allChannelsMap.erase(channel->Getfd());
 
     channel->Status = ChannelStatus::New;
+    allChannelsMap.erase(channel->Getfd());
 }
 
 void EventCycle::DisableChannel(Channel* channel)
 {
-    LOG_DEBUG("channel %p status %d fd %d disabled",
+    LOG_DEBUG("channel %p with status %d fd %d disabled",
                 channel, channel->Status, channel->Getfd());
 
     assert(channel->Status == ChannelStatus::Set);
@@ -63,13 +53,32 @@ void EventCycle::DisableChannel(Channel* channel)
     poller->RemoveChannel(channel);
 }
 
-void EventCycle::RegisterChannel(Channel* channel)
+void EventCycle::RegisterChannel(ChannelPtr channel)
 {
     LOG_DEBUG("channel %p status %d fd %d registered",
-                channel, channel->Status, channel->Getfd());
+                channel.get(), channel->Status, channel->Getfd());
 
     assert(channel->Status == ChannelStatus::New);
+    assert(allChannelsMap.find(channel->Getfd()) == allChannelsMap.end());
 
-    allChannelsMap[channel->Getfd()] = channel;
     channel->Status = ChannelStatus::Removed;
+    allChannelsMap[channel->Getfd()] = std::move(channel);
+}
+
+void EventCycle::UpdateChannel(ChannelPtr channel)
+{
+    LOG_DEBUG("channel %p status %d fd %d updated",
+                channel.get(), channel->Status, channel->Getfd());
+
+    Channel* chan = channel.get();
+
+    if(channel->Status == ChannelStatus::New)
+    {
+        // must not exist
+        assert(allChannelsMap.find(channel->Getfd()) == allChannelsMap.end());
+
+        allChannelsMap[channel->Getfd()] = std::move(channel);
+    }
+
+    poller->UpdateChannel(chan);
 }

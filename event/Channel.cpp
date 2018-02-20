@@ -7,13 +7,9 @@ void Channel::Close()
     events = CNEVENT;
     remove();
 
-    // should set these functions to nullptr
-    // because they may be bound with some shared_ptrs
-    readCallback = nullptr;
-    writeCallback = nullptr;
-    errorCallback = nullptr;
-
     closed = true;
+
+    LOG_DEBUG("Channel %p closed", this);
 }
 
 void Channel::update()
@@ -24,7 +20,7 @@ void Channel::update()
     }
     else
     {
-        eventCycle->UpdateChannel(this);
+        eventCycle->UpdateChannel(shared_from_this());
     }
 }
 

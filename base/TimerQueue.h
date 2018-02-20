@@ -11,6 +11,7 @@
 #include <utility>
 #include <unistd.h>
 
+#include "base/Utilities.h"
 #include "base/Timer.h"
 #include "event/EventCycle.h"
 #include "event/Channel.h"
@@ -30,11 +31,7 @@ public:
       : eventCycle(ec),
         armed(false),
         timerfd(-1),
-        timerChannel(),
-        initCap(count),
-        timersSet(),
-        timersPool(),
-        indexes()
+        initCap(count)
     {
         assert(ec);
     }
@@ -57,7 +54,7 @@ public:
     void Init();
 private:
     // return Timer to object pool
-    void returnTimer(const Timer* timer);
+    void returnTimer(Timer* timer);
     // reset the earliest timedout point of timerfd and new interval calculated by it
     void resetTimerfd(Timepoint);
     // callback for timerfd's read event
@@ -69,10 +66,10 @@ private:
     bool armed;
     // timerfd
     int timerfd;
-    // Channel for this timerfd
-    std::unique_ptr<Channel> timerChannel;
     // initial capacity of object pool
     int initCap;
+    // Channel for this timerfd
+    ChannelPtr timerChannel;
     // current Timers set which is in timerfd's control
     std::set<TimerEntry> timersSet;
     // Timer object pool

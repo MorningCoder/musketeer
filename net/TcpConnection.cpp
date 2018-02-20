@@ -6,13 +6,33 @@
 using namespace musketeer;
 using namespace std;
 
+void TcpConnection::Init()
+{
+    if(channel->Status == ChannelStatus::New)
+    {
+        channel->Register();
+    }
+
+    channel->SetErrorCallback(MakeWeakCallback(&TcpConnection::handleError, weak_from_this()));
+    channel->SetReadCallback(MakeWeakCallback(&TcpConnection::handleRead, weak_from_this()));
+    channel->SetWriteCallback(MakeWeakCallback(&TcpConnection::handleWrite, weak_from_this()));
+
+    // only initialise these timers, do not add them
+    readTimer->Reset(MakeWeakCallback(&TcpConnection::handleReadTimedout,
+                                        weak_from_this()), false);
+    writeTimer->Reset(MakeWeakCallback(&TcpConnection::handleWriteTimedout,
+                                        weak_from_this()), false);
+}
+
 void TcpConnection::Close()
 {
-    assert(readBuf == nullptr);
     if(status != TcpConnectionStatus::Closed)
     {
         // move out of epoll and EventCycle
-        channel.Close();
+        channel->Close();
+        // remove timer
+        readTimer->Cancel();
+        writeTimer->Cancel();
         // close fd
         connfd.Close();
         // buffers will all be cleared
@@ -24,11 +44,10 @@ void TcpConnection::Close()
     }
 }
 
-void TcpConnection::SetReadCallback(TcpConnectionReadCallback cb, Buffer* buf)
+void TcpConnection::SetReadCallback(TcpConnectionReadCallback cb, Buffer* buf, int msec)
 {
-    assert(readBuf == nullptr);
-    assert(buf->AvailableSize() == 0);
-    assert(!channel.IsReading());
+    assert(buf->AppendableSize() > 0);
+    assert(!channel->IsReading());
 
     readAvailableCallback = std::move(cb);
     readBuf = buf;
@@ -36,16 +55,23 @@ void TcpConnection::SetReadCallback(TcpConnectionReadCallback cb, Buffer* buf)
     if(status != TcpConnectionStatus::Established)
     {
         readAvailableCallback(shared_from_this(), buf);
-        readBuf = nullptr;
         return;
     }
 
-    channel.EnableReading();
+    // channel->readCallback may be unset by timedout handler
+    if(!channel->IsReadCallbackSet())
+    {
+        channel->SetReadCallback(MakeWeakCallback(&TcpConnection::handleRead,
+                                                    weak_from_this()));
+    }
+
+    channel->EnableReading();
+    readTimer->Update(msec);
 }
 
-void TcpConnection::Send(TcpConnectionCallback cb)
+void TcpConnection::Send(TcpConnectionCallback cb, int msec)
 {
-    assert(!channel.IsWriting());
+    assert(!channel->IsWriting());
 
     writeFinishedCallback = std::move(cb);
 
@@ -55,6 +81,8 @@ void TcpConnection::Send(TcpConnectionCallback cb)
         writeFinishedCallback(shared_from_this());
         return;
     }
+
+    writeTimer->Update(msec);
 
     assert(writeBufChain.size() != 0);
     handleWrite();
@@ -87,20 +115,24 @@ Buffer* TcpConnection::GetWriteableBuffer()
 
 void TcpConnection::handleRead()
 {
+    assert(readBuf);
+    readTimer->Cancel();
     if(status != TcpConnectionStatus::Established)
     {
-        channel.DisableReading();
+        if(channel->IsReading())
+        {
+            channel->DisableReading();
+        }
+
         readAvailableCallback(shared_from_this(), readBuf);
         return;
     }
 
-    assert(readBuf);
     bool peerClosed = false;
 
     bool ret = ReadFd(connfd.Getfd(), *readBuf, savedErrno, peerClosed);
-
-    Buffer* rbuf = readBuf;
-    readBuf = nullptr;
+    LOG_DEBUG("ReadFd() returned %d on fd %d, errno was %d peerClosed was %d",
+                ret, connfd.Getfd(), savedErrno, peerClosed);
 
     if(peerClosed)
     {
@@ -109,20 +141,25 @@ void TcpConnection::handleRead()
 
     if(!ret)
     {
-        handleError();
+        LOG_WARN("ReadFd() faild on fd %d, errno was %d, closing TcpConnection",
+                    connfd.Getfd(), savedErrno);
+        Close();
+    }
+    else
+    {
+        channel->DisableReading();
     }
 
-    channel.DisableReading();
-    readAvailableCallback(shared_from_this(), rbuf);
+    readAvailableCallback(shared_from_this(), readBuf);
 }
 
 void TcpConnection::handleWrite()
 {
     if(status != TcpConnectionStatus::Established)
     {
-        if(channel.IsWriting())
+        if(channel->IsWriting())
         {
-            channel.DisableWriting();
+            channel->DisableWriting();
         }
         writeFinishedCallback(shared_from_this());
         return;
@@ -141,24 +178,39 @@ void TcpConnection::handleWrite()
         ret = WritevFd(connfd.Getfd(), writeBufChain, savedErrno, allSent);
     }
 
+    LOG_DEBUG("WritevFd()/WriteFd() returned %d on fd %d, errno was %d allSent was %d",
+                ret, connfd.Getfd(), savedErrno, allSent);
+
     if(!ret)
     {
-        handleError();
-        if(channel.IsWriting())
-        {
-            channel.DisableWriting();
-        }
+        LOG_WARN("WriteFd() faild on fd %d, errno was %d, closing TcpConnection",
+                    connfd.Getfd(), savedErrno);
+        Close();
         writeFinishedCallback(shared_from_this());
         return;
     }
 
     if(allSent)
     {
-        if(channel.IsWriting())
+        if(channel->IsWriting())
         {
-            channel.DisableWriting();
+            channel->DisableWriting();
         }
         writeFinishedCallback(shared_from_this());
+    }
+    else
+    {
+        // channel->writeCallback may be unset by timedout handler
+        if(!channel->IsWriteCallbackSet())
+        {
+            channel->SetWriteCallback(MakeWeakCallback(&TcpConnection::handleWrite,
+                                                        weak_from_this()));
+        }
+
+        if(!channel->IsWriting())
+        {
+            channel->EnableWriting();
+        }
     }
 }
 
@@ -167,24 +219,48 @@ void TcpConnection::handleError()
     // peer reset the connection
     LOG_WARN("Peer %s just reset the connection, closing", remoteAddr.ToString().c_str());
     savedErrno = connfd.GetError();
-    if(status != TcpConnectionStatus::Closed)
-    {
-        Close();
-    }
+    Close();
 }
 
-TcpConnectionPtr TcpConnection::New(Socket sock, Channel chan, bool connecting,
+TcpConnectionPtr TcpConnection::New(Socket sock, ChannelPtr chan, bool connecting,
                                     TcpConnectionCreator* creator,
                                     const InetAddr& localAddr, const InetAddr& remoteAddr,
-                                    TimerPtr timer)
+                                    TimerPtr rtimer, TimerPtr wtimer)
 {
     LOG_DEBUG("%s TcpConnection %s -> %s on fd %d is created",
                 connecting ? "positive" : "negative",
                 connecting ? localAddr.ToString().c_str() : remoteAddr.ToString().c_str(),
                 connecting ? remoteAddr.ToString().c_str() : localAddr.ToString().c_str(),
                 sock.Getfd());
-    return make_shared<TcpConnection>(std::move(sock), std::move(chan), connecting,
-                                        creator, localAddr, remoteAddr, std::move(timer));
+    TcpConnectionPtr newConn(new TcpConnection(std::move(sock), std::move(chan), connecting,
+                                                creator, localAddr, remoteAddr,
+                                                std::move(rtimer), std::move(wtimer)));
+    newConn->Init();
+
+    return std::move(newConn);
+}
+
+void TcpConnection::handleReadTimedout()
+{
+    assert(channel->IsReading());
+    // remove from epoll only, it's only caller who decide wether to Close() TcpConnection
+    channel->DisableReading();
+    // set read callback to nullptr to avoid double calling
+    channel->UnsetReadCallback();
+
+    // TODO handler should indicate exact error type
+    readAvailableCallback(shared_from_this(), readBuf);
+}
+
+void TcpConnection::handleWriteTimedout()
+{
+    assert(channel->IsWriting());
+    // remove from epoll only, it's only caller who decide wether to Close() TcpConnection
+    channel->DisableWriting();
+    // set write callback to nullptr to avoid double calling
+    channel->UnsetWriteCallback();
+
+    writeFinishedCallback(shared_from_this());
 }
 
 /*void TcpConnection::writeBufChainStat(size_t& availSize, size_t& appendSize)

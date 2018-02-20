@@ -52,8 +52,8 @@ private:
 class ConnectState : public std::enable_shared_from_this<ConnectState>
 {
 public:
-    ConnectState(Socket, Channel, TcpConnectionCallback, Connector*);
-    ~ConnectState() = default;
+    ConnectState(Socket, TcpConnectionCallback, Connector*);
+    ~ConnectState();
 
     // check wether to call trace() or retry()
     void Check(int);
@@ -74,7 +74,7 @@ private:
     Connector* connector;
     TimerPtr timer;
     Socket socket;
-    Channel channel;
+    ChannelPtr channel;
     TcpConnectionCallback callback;
     // mark if ConnectState has finalised its work
     bool finalised;

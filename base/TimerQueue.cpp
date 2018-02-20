@@ -28,7 +28,7 @@ TimerPtr TimerQueue::NewTimer()
     Timer& timer = timersPool.at(i);
 
     timer.repeated = false;
-    timer.timedoutCallback = nullptr;
+    timer.set = false;
 
     return TimerPtr(&timer, std::bind(&TimerQueue::returnTimer, this, _1));
 }
@@ -80,6 +80,7 @@ void TimerQueue::Init()
     }
 
     timerChannel.reset(new Channel(const_cast<EventCycle*>(eventCycle), timerfd));
+    timerChannel->Register();
 
     for(int i = 0; i < initCap; i++)
     {
@@ -160,8 +161,9 @@ void TimerQueue::handleRead()
     timersSet.erase(timersSet.begin(), iter);
 }
 
-void TimerQueue::returnTimer(const Timer* timer)
+void TimerQueue::returnTimer(Timer* timer)
 {
+    timer->timedoutCallback = nullptr;
     int index = timer->Index();
     LOG_DEBUG("A in-pool Timer %p with index %d is returned", timer, index);
     indexes.push(index);
