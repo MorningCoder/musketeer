@@ -53,20 +53,15 @@ void Listener::handleAccept()
 {
     InetAddr remoteAddr;
     InetAddr localAddr;
-    bool fdRunout = false;
 
-    Socket acceptSock = listenfd.Accept(remoteAddr, fdRunout);
+    Error error(NoError, 0);
+
+    Socket acceptSock = listenfd.Accept(remoteAddr, error);
 
     if(!acceptSock.Valid())
     {
-        if(fdRunout)
-        {
-            LOG_ALERT("Listener found fd has run out !");
-        }
-        else
-        {
-            LOG_ALERT("Listener accepting new connection failed !");
-        }
+        LOG_ALERT("Listener accepting new connection failed! error is <%d, %d>",
+                    error.first, error.second);
         return;
     }
 

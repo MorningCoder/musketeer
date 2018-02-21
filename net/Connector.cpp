@@ -36,7 +36,6 @@ void ConnectState::trace()
     if(timer->Repeated())
     {
         // only retry() will set repeated, and trace do not need repeat
-        // TODO apply param with conf
         timer->SetRepeated(false);
         timer->Update();
     }
@@ -48,7 +47,7 @@ void ConnectState::retry(int msec)
 {
     if(++retries > 3)
     {
-        finalise(0, true, false);
+        finalise(Error(ConnectRetryOverlimit, 0));
         return;
     }
 
@@ -72,7 +71,15 @@ void ConnectState::handleWrite()
     LOG_DEBUG("start to process write event");
 
     int err = socket.GetError();
-    finalise(err, false, false);
+
+    if(err > 0)
+    {
+        finalise(Error(ConnectError, err));
+    }
+    else
+    {
+        finalise(Error(NoError, 0));
+    }
 }
 
 void ConnectState::handleError()
@@ -86,7 +93,7 @@ void ConnectState::handleError()
     int err = socket.GetError();
     // an error must have been occured
     assert(err > 0);
-    finalise(err, false, false);
+    finalise(Error(ConnectError, err));
 }
 
 void ConnectState::handleTimedout()
@@ -100,28 +107,28 @@ void ConnectState::handleTimedout()
     if(retries > 0)
     {
         // retry timedout
-        int savedErrno = 0;
-        int ret = socket.Connect(socket.GetRemoteAddr(), savedErrno);
+        Error error(NoError, 0);
+        int ret = socket.Connect(socket.GetRemoteAddr(), error);
         if(ret >= 0)
         {
             Check(ret);
         }
         else
         {
-            assert(savedErrno > 0);
-            finalise(savedErrno, false, false);
+            assert(error.first == ErrorType::ConnectError && error.second > 0);
+            finalise(error);
         }
     }
     else
     {
         // connection timedout
-        finalise(0, false, true);
+        finalise(Error(ConnectTimedout, 0));
     }
 }
 
-void ConnectState::finalise(int err, bool retryOverLimit, bool timedout)
+void ConnectState::finalise(Error error)
 {
-    assert(err >= 0);
+    assert(error.second >= 0);
     int fd = socket.Getfd();
 
     TcpConnectionPtr newConn = nullptr;
@@ -129,28 +136,29 @@ void ConnectState::finalise(int err, bool retryOverLimit, bool timedout)
     timer->Cancel();
     channel->DisableAll();
 
-    if(retryOverLimit)
+    if(error.first == ErrorType::ConnectRetryOverlimit)
     {
-        assert(!timedout);
         LOG_WARN("retrying connection to %s on fd %d for over 3 times, callback as failure",
                     socket.GetRemoteAddr().ToString().c_str(), fd);
         connector->DecreaseConnectionNum();
     }
-    else if(timedout)
+    else if(error.first == ErrorType::ConnectTimedout)
     {
-        assert(!retryOverLimit);
         LOG_WARN("found connection to %s on fd %d timedout, callback as failure",
                     socket.GetRemoteAddr().ToString().c_str(), fd);
         connector->DecreaseConnectionNum();
     }
-    else if(err)
+    else if(error.first == ErrorType::ConnectError)
     {
+        assert(error.second > 0);
         LOG_WARN("found connection to %s failed on fd %d, errno was %d",
-                    socket.GetRemoteAddr().ToString().c_str(), fd, err);
+                    socket.GetRemoteAddr().ToString().c_str(), fd, error.second);
         connector->DecreaseConnectionNum();
     }
     else
     {
+        assert(error.first == ErrorType::NoError && error.second == 0);
+
         InetAddr localAddr = socket.GetLocalAddr();
         InetAddr remoteAddr = socket.GetRemoteAddr();
         LOG_DEBUG("connection to %s succeeded on fd %d", remoteAddr.ToString().c_str(), fd);
@@ -194,6 +202,7 @@ void ConnectState::Check(int ret)
 void Connector::Connect(const InetAddr& remoteAddr, TcpConnectionCallback cb)
 {
     Socket connsock = Socket::New(AddrFamily::IP4);
+    Error error(NoError, 0);
 
     if(!connsock.Valid())
     {
@@ -212,11 +221,11 @@ void Connector::Connect(const InetAddr& remoteAddr, TcpConnectionCallback cb)
         return;
     }
 
-    int savedErrno = 0;
-    int ret = connsock.Connect(remoteAddr, savedErrno);
+    int ret = connsock.Connect(remoteAddr, error);
 
     int fd = connsock.Getfd();
-    LOG_DEBUG("Socket::Connect() on fd %d returned %d errno is %d", fd, ret, savedErrno);
+    LOG_DEBUG("Socket::Connect() on fd %d returned %d error is <%d, %d>",
+                fd, ret, error.first, error.second);
 
     if(ret >= 0)
     {
@@ -226,9 +235,9 @@ void Connector::Connect(const InetAddr& remoteAddr, TcpConnectionCallback cb)
     }
     else
     {
-        assert(savedErrno > 0);
-        LOG_WARN("Connector failed to connect() %s on fd %d with errno %d",
-                    remoteAddr.ToString().c_str(), fd, savedErrno);
+        assert(error.second > 0);
+        LOG_WARN("Connector failed to connect() %s on fd %d with error <%d, %d>",
+                    remoteAddr.ToString().c_str(), fd, error.first, error.second);
         DecreaseConnectionNum();
         cb(nullptr);
         return;

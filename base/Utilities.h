@@ -39,11 +39,46 @@ const size_t CMaxLogPrefixLength = 128;
 
 // enums
 
-enum TcpConnectionStatus {Established = 0, PeerClosed, Closed};
+enum TcpConnectionStatus { Established = 0, PeerClosed, Closed };
 enum LogLevel { Debug = 0, Notice, Warn, Alert, Fatal };
+enum ErrorType
+{
+    // default situation, no error occured
+    // usually not used because there should be other data structures to indicate
+    NoError = 0,
+    // ErrnoIgnorable(errno) returns true
+    IgnorableError,
+    // read() returned -1
+    ReadError,
+    // read() returned 0
+    ReadPeerClosed,
+    // read event not occure within given timedout msecs
+    ReadTimedout,
+    // write()/writev() returned -1
+    WriteError,
+    // TcpConnection::Send() failed to send all the data within given msecs
+    WriteTimedout,
+    // accept() returned -1
+    AcceptError,
+    // Socket::Connet() returned -1
+    ConnectError,
+    // write event not occure within given timedout msecs
+    ConnectTimedout,
+    // Connector had retried more than given number times but didn't succeed
+    ConnectRetryOverlimit,
+    // current Connector/Listener's connections number is over limit
+    ConnectionsOverlimit,
+    // system's fd has run out
+    ConnectionsRunout,
+    // disk IO error
+    DiskError,
+    // disk IO didn't finish within given timedout msecs
+    // DiskTimedout
+};
 
 // types
 typedef std::function<void()> Task;
+typedef std::pair<ErrorType, int> Error;
 // Channel can be used both by its owner and EventCycle, so it should be shared
 typedef std::shared_ptr<Channel> ChannelPtr;
 typedef std::weak_ptr<Channel> WeakChannelPtr;
@@ -55,7 +90,8 @@ typedef std::chrono::duration<int, std::milli> TimeDuration;
 
 // callbacks
 typedef std::function<void(TcpConnectionPtr)> TcpConnectionCallback;
-typedef std::function<void(TcpConnectionPtr, Buffer*)> TcpConnectionReadCallback;
+typedef std::function<void(TcpConnectionPtr, Error)> TcpConnectionWriteCallback;
+typedef std::function<void(TcpConnectionPtr, Buffer*, Error)> TcpConnectionReadCallback;
 typedef std::function<void()> EventCallback;
 
 // some utility functions
@@ -66,9 +102,9 @@ void logFormat(LogLevel, const char*, int, const char*, const char*, ...);
 bool ErrnoIgnorable(int);
 
 // write/read socket fd, will return false only if unrecoverable error happend
-bool WritevFd(int, std::list<Buffer>&, int&, bool&);
-bool WriteFd(int, Buffer&, int&, bool&);
-bool ReadFd(int, Buffer&, int&, bool&);
+bool WritevFd(int, std::list<Buffer>&, Error&, bool&);
+bool WriteFd(int, Buffer&, Error&, bool&);
+bool ReadFd(int, Buffer&, Error&);
 
 // convert time_point into string to be displayed
 std::string TimepointToString(const std::chrono::system_clock::time_point&);

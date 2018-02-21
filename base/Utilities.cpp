@@ -54,10 +54,11 @@ bool ErrnoIgnorable(int n)
     }
 }
 
-bool WritevFd(int fd, std::list<Buffer>& bufferChain, int& savedErrno, bool& allSent)
+bool WritevFd(int fd, std::list<Buffer>& bufferChain, Error& error, bool& allSent)
 {
     allSent = false;
-    savedErrno = 0;
+    error = Error(NoError, 0);
+
     if(bufferChain.size() == 0)
     {
         return true;
@@ -96,23 +97,21 @@ bool WritevFd(int fd, std::list<Buffer>& bufferChain, int& savedErrno, bool& all
     assert(i == availNum);
 
     ssize_t n = ::writev(fd, iov, availNum);
-    savedErrno = errno;
     if(n < 0)
     {
-        if(!ErrnoIgnorable(savedErrno))
+        if(!ErrnoIgnorable(errno))
         {
-            // TODO Notice log
+            error = Error(WriteError, errno);
             return false;
         }
         else
         {
-            // TODO Notice log
+            error = Error(IgnorableError, errno);
             return true;
         }
     }
     else if(n == 0)
     {
-        // TODO Notice log
         return true;
     }
     else
@@ -147,10 +146,10 @@ bool WritevFd(int fd, std::list<Buffer>& bufferChain, int& savedErrno, bool& all
     }
 }
 
-bool WriteFd(int fd, Buffer& buffer, int& savedErrno, bool& allSent)
+bool WriteFd(int fd, Buffer& buffer, Error& error, bool& allSent)
 {
     allSent = false;
-    savedErrno = 0;
+    error = Error(NoError, 0);
     size_t availSize = buffer.AvailableSize();
 
     if(availSize == 0)
@@ -162,23 +161,21 @@ bool WriteFd(int fd, Buffer& buffer, int& savedErrno, bool& allSent)
 
     ssize_t n = ::write(fd, buf.first, buf.second);
 
-    savedErrno = errno;
     if(n < 0)
     {
-        if(!ErrnoIgnorable(savedErrno))
+        if(!ErrnoIgnorable(errno))
         {
-            // TODO Notice log
+            error = Error(WriteError, errno);
             return false;
         }
         else
         {
-            // TODO Notice log
+            error = Error(IgnorableError, errno);
             return true;
         }
     }
     else if(n == 0)
     {
-        // TODO Notice log
         return true;
     }
     else
@@ -193,10 +190,9 @@ bool WriteFd(int fd, Buffer& buffer, int& savedErrno, bool& allSent)
     }
 }
 
-bool ReadFd(int fd, Buffer& buffer, int& savedErrno, bool& peerClosed)
+bool ReadFd(int fd, Buffer& buffer, Error& error)
 {
-    savedErrno = 0;
-    peerClosed = false;
+    error = Error(NoError, 0);
 
     size_t appendSize = buffer.AppendableSize();
 
@@ -207,22 +203,23 @@ bool ReadFd(int fd, Buffer& buffer, int& savedErrno, bool& peerClosed)
 
     RawBuf buf = buffer.AppendablePos();
     ssize_t n = ::read(fd, buf.first, buf.second);
-    savedErrno = errno;
 
     if(n < 0)
     {
-        if(!ErrnoIgnorable(savedErrno))
+        if(!ErrnoIgnorable(errno))
         {
+            error = Error(ConnectError, errno);
             return false;
         }
         else
         {
+            error = Error(IgnorableError, errno);
             return true;
         }
     }
     else if(n == 0)
     {
-        peerClosed = true;
+        error = Error(ReadPeerClosed, 0);
         return true;
     }
     else

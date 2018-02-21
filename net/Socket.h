@@ -6,8 +6,10 @@
 #ifndef MUSKETEER_NET_SOCKET_H
 #define MUSKETEER_NET_SOCKET_H
 
-#include "unistd.h"
-#include "sys/socket.h"
+#include <unistd.h>
+#include <sys/socket.h>
+
+#include "base/Utilities.h"
 
 namespace musketeer
 {
@@ -81,11 +83,11 @@ public:
     // getsockopt(SO_ERROR)
     int GetError();
     // accept4()
-    Socket Accept(InetAddr&, bool&);
+    Socket Accept(InetAddr&, Error&);
     // returns 1 if connect() succeeded in starting the operation
     // returns 0 if connect() failed but still retriable
     // return -1 if uncoverable error occured
-    int Connect(const InetAddr&, int&);
+    int Connect(const InetAddr&, Error&);
 
     // setsockopt(TCP_NODELAY)
     void SetNagle(bool);

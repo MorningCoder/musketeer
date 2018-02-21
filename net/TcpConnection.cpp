@@ -54,7 +54,7 @@ void TcpConnection::SetReadCallback(TcpConnectionReadCallback cb, Buffer* buf, i
 
     if(status != TcpConnectionStatus::Established)
     {
-        readAvailableCallback(shared_from_this(), buf);
+        readAvailableCallback(shared_from_this(), buf, Error(ReadError, savedErrno));
         return;
     }
 
@@ -69,7 +69,7 @@ void TcpConnection::SetReadCallback(TcpConnectionReadCallback cb, Buffer* buf, i
     readTimer->Update(msec);
 }
 
-void TcpConnection::Send(TcpConnectionCallback cb, int msec)
+void TcpConnection::Send(TcpConnectionWriteCallback cb, int msec)
 {
     assert(!channel->IsWriting());
 
@@ -78,7 +78,7 @@ void TcpConnection::Send(TcpConnectionCallback cb, int msec)
     if(status != TcpConnectionStatus::Established)
     {
         // error occured on this connection or peer closed, cannot write any more
-        writeFinishedCallback(shared_from_this());
+        writeFinishedCallback(shared_from_this(), Error(WriteError, savedErrno));
         return;
     }
 
@@ -124,25 +124,28 @@ void TcpConnection::handleRead()
             channel->DisableReading();
         }
 
-        readAvailableCallback(shared_from_this(), readBuf);
+        readAvailableCallback(shared_from_this(), readBuf, Error(ReadError, savedErrno));
         return;
     }
 
-    bool peerClosed = false;
+    Error error(NoError, 0);
 
-    bool ret = ReadFd(connfd.Getfd(), *readBuf, savedErrno, peerClosed);
-    LOG_DEBUG("ReadFd() returned %d on fd %d, errno was %d peerClosed was %d",
-                ret, connfd.Getfd(), savedErrno, peerClosed);
+    bool ret = ReadFd(connfd.Getfd(), *readBuf, error);
+    LOG_DEBUG("ReadFd() returned %d on fd %d, error was <%d, %d>",
+                ret, connfd.Getfd(), error.first, error.second);
 
-    if(peerClosed)
+    savedErrno = error.second;
+
+    if(error.first == ErrorType::ReadPeerClosed)
     {
+        assert(ret);
         status = TcpConnectionStatus::PeerClosed;
     }
 
     if(!ret)
     {
-        LOG_WARN("ReadFd() faild on fd %d, errno was %d, closing TcpConnection",
-                    connfd.Getfd(), savedErrno);
+        LOG_WARN("ReadFd() faild on fd %d, errno was <%d, %d>, closing TcpConnection",
+                    connfd.Getfd(), error.first, error.second);
         Close();
     }
     else
@@ -150,7 +153,7 @@ void TcpConnection::handleRead()
         channel->DisableReading();
     }
 
-    readAvailableCallback(shared_from_this(), readBuf);
+    readAvailableCallback(shared_from_this(), readBuf, error);
 }
 
 void TcpConnection::handleWrite()
@@ -161,7 +164,7 @@ void TcpConnection::handleWrite()
         {
             channel->DisableWriting();
         }
-        writeFinishedCallback(shared_from_this());
+        writeFinishedCallback(shared_from_this(), Error(WriteError, savedErrno));
         return;
     }
 
@@ -169,34 +172,39 @@ void TcpConnection::handleWrite()
 
     bool allSent = false;
     bool ret = false;
+    Error error(NoError, 0);
+
     if(writeBufChain.size() == 1)
     {
-        ret = WriteFd(connfd.Getfd(), writeBufChain.front(), savedErrno, allSent);
+        ret = WriteFd(connfd.Getfd(), writeBufChain.front(), error, allSent);
     }
     else
     {
-        ret = WritevFd(connfd.Getfd(), writeBufChain, savedErrno, allSent);
+        ret = WritevFd(connfd.Getfd(), writeBufChain, error, allSent);
     }
 
-    LOG_DEBUG("WritevFd()/WriteFd() returned %d on fd %d, errno was %d allSent was %d",
-                ret, connfd.Getfd(), savedErrno, allSent);
+    savedErrno = error.second;
+    LOG_DEBUG("WritevFd()/WriteFd() returned %d on fd %d, errno was <%d, %d> allSent was %d",
+                ret, connfd.Getfd(), error.first, error.second, allSent);
 
     if(!ret)
     {
-        LOG_WARN("WriteFd() faild on fd %d, errno was %d, closing TcpConnection",
-                    connfd.Getfd(), savedErrno);
+        assert(error.first == ErrorType::WriteError);
+        LOG_WARN("WriteFd() faild on fd %d, errno was <%d, %d>, closing TcpConnection",
+                    connfd.Getfd(), error.first, error.second);
         Close();
-        writeFinishedCallback(shared_from_this());
+        writeFinishedCallback(shared_from_this(), error);
         return;
     }
 
     if(allSent)
     {
+        assert(error.first == ErrorType::NoError && error.second == 0);
         if(channel->IsWriting())
         {
             channel->DisableWriting();
         }
-        writeFinishedCallback(shared_from_this());
+        writeFinishedCallback(shared_from_this(), error);
     }
     else
     {
@@ -248,8 +256,7 @@ void TcpConnection::handleReadTimedout()
     // set read callback to nullptr to avoid double calling
     channel->UnsetReadCallback();
 
-    // TODO handler should indicate exact error type
-    readAvailableCallback(shared_from_this(), readBuf);
+    readAvailableCallback(shared_from_this(), readBuf, Error(ReadTimedout, 0));
 }
 
 void TcpConnection::handleWriteTimedout()
@@ -260,7 +267,7 @@ void TcpConnection::handleWriteTimedout()
     // set write callback to nullptr to avoid double calling
     channel->UnsetWriteCallback();
 
-    writeFinishedCallback(shared_from_this());
+    writeFinishedCallback(shared_from_this(), Error(WriteTimedout, 0));
 }
 
 /*void TcpConnection::writeBufChainStat(size_t& availSize, size_t& appendSize)

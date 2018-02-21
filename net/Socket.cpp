@@ -74,13 +74,12 @@ int Socket::GetError()
     return err;
 }
 
-Socket Socket::Accept(InetAddr& addr, bool& fdRunout)
+Socket Socket::Accept(InetAddr& addr, Error& error)
 {
     assert(Valid());
     int sock = 0;
     struct sockaddr_in peeraddr;
     socklen_t len = 0;
-    fdRunout = false;
 
     if((sock = ::accept4(fd, InetAddr::GeneraliseAddr(&peeraddr), &len,
         SOCK_NONBLOCK | SOCK_CLOEXEC)) < 0)
@@ -95,11 +94,12 @@ Socket Socket::Accept(InetAddr& addr, bool& fdRunout)
         case EPERM:
             // these are ignorable errors
             LOG_WARN("accept() encountered ignorable error on fd %d, errno=%d", fd, savedErrno);
+            error = Error(IgnorableError, savedErrno);
             break;
         case EMFILE:
         case ENFILE:
             // fd has run out
-            fdRunout = true;
+            error = Error(ConnectionsRunout, savedErrno);
             LOG_ALERT("accept() found fd run out on fd %d, errno=%d", fd, savedErrno);
             break;
         case EBADF:
@@ -110,10 +110,12 @@ Socket Socket::Accept(InetAddr& addr, bool& fdRunout)
             // these are unrecoverable errors
             LOG_WARN("accept() encountered unrecoverable error on fd %d, errno=%d",
                         fd, savedErrno);
+            error = Error(AcceptError, savedErrno);
             break;
         default:
             LOG_WARN("accept() encountered unknown error on fd %d, errno=%d",
                         fd, savedErrno);
+            error = Error(AcceptError, savedErrno);
             break;
         }
 
@@ -122,16 +124,17 @@ Socket Socket::Accept(InetAddr& addr, bool& fdRunout)
     else
     {
         addr.Set(peeraddr);
+        error = Error(NoError, 0);
         return Socket(sock);
     }
 }
 
-int Socket::Connect(const InetAddr& remoteAddr, int& savedErrno)
+int Socket::Connect(const InetAddr& remoteAddr, Error& error)
 {
     struct sockaddr_in raddr = remoteAddr.Get();
     int ret = ::connect(fd, InetAddr::GeneraliseAddr(&raddr),
                         static_cast<socklen_t>(sizeof(struct sockaddr_in)));
-    savedErrno = (ret == 0) ? 0 : errno;
+    int savedErrno = (ret == 0) ? 0 : errno;
     switch (savedErrno)
     {
     case 0:
@@ -139,6 +142,7 @@ int Socket::Connect(const InetAddr& remoteAddr, int& savedErrno)
     case EINTR:
     case EISCONN:
         LOG_DEBUG("connect() succeeded with errno=%d", savedErrno);
+        error = Error(NoError, savedErrno);
       return 1;
       break;
 
@@ -148,6 +152,7 @@ int Socket::Connect(const InetAddr& remoteAddr, int& savedErrno)
     case ECONNREFUSED:
     case ENETUNREACH:
         LOG_DEBUG("connect() failed but still retriable with errno=%d", savedErrno);
+        error = Error(IgnorableError, savedErrno);
       return 0;
       break;
 
@@ -159,11 +164,13 @@ int Socket::Connect(const InetAddr& remoteAddr, int& savedErrno)
     case EFAULT:
     case ENOTSOCK:
         LOG_WARN("connect() failed unrecoverably with errno=%d", savedErrno);
+        error = Error(ConnectError, savedErrno);
         return -1;
         break;
 
     default:
         LOG_WARN("connect() failed due to unknown error with errno=%d", savedErrno);
+        error = Error(ConnectError, savedErrno);
         return -1;
         break;
     }

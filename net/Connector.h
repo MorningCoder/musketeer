@@ -69,7 +69,7 @@ private:
     // retry connection after some msecs
     void retry(int);
     // create a TcpConnection and callback with it OR callback with given error
-    void finalise(int, bool, bool);
+    void finalise(Error);
 
     Connector* connector;
     TimerPtr timer;

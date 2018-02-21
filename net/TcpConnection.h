@@ -93,7 +93,7 @@ public:
     // and then add the event for futher writing operation if necessary
     // writeFinishedCallback will be called after write operation is done
     // writeFinishedCallback will be called immediately if writeBuf is empty
-    void Send(TcpConnectionCallback, int);
+    void Send(TcpConnectionWriteCallback, int);
     // require a write buffer to append data by caller
     // will allocate one if there is no available ones
     Buffer* GetWriteableBuffer();
@@ -130,7 +130,7 @@ private:
     // read event callback set by outside application
     TcpConnectionReadCallback readAvailableCallback;
     // will call this callback when all the data in writeBuf have been writen to kernel
-    TcpConnectionCallback writeFinishedCallback;
+    TcpConnectionWriteCallback writeFinishedCallback;
     // writeBuf is managed by TcpConnection
     std::list<Buffer> writeBufChain;
     // readBuf is set by caller
