@@ -23,7 +23,7 @@ class Connector : public TcpConnectionCreator
 friend class ConnectState;
 public:
     Connector(int connectionLimit_, NetWorker* owner_)
-      : owner(owner_),
+      : TcpConnectionCreator(owner_),
         connectionLimit(connectionLimit_)
     {
         LOG_DEBUG("%p is constructed", this);
@@ -39,13 +39,16 @@ public:
 
     // connect interface
     void Connect(const InetAddr&, TcpConnectionCallback cb);
+
+    void RetainTcpConnection(TcpConnectionPtr);
 private:
-    // owner NetWorker
-    NetWorker* owner;
+    // read callback for keep-alived connection
+    void handleKeepalivedRead(TcpConnectionPtr, Error);
+
     // connections number lmit
     const int connectionLimit;
-    // use int to search a ConnectState easily
-    std::unordered_map<int, std::shared_ptr<ConnectState>> connections;
+    // each ConnectState represents a ongoing connecting process
+    std::unordered_map<int, std::shared_ptr<ConnectState>> ongoingConnections;
 };
 
 // all are value types, used to mark a pending connection

@@ -77,6 +77,8 @@ enum ErrorType
 };
 
 // types
+typedef uint64_t TcpConnectionID;
+typedef uint64_t TcpConnectionGroupID;
 typedef std::function<void()> Task;
 typedef std::pair<ErrorType, int> Error;
 // Channel can be used both by its owner and EventCycle, so it should be shared
@@ -90,8 +92,7 @@ typedef std::chrono::duration<int, std::milli> TimeDuration;
 
 // callbacks
 typedef std::function<void(TcpConnectionPtr)> TcpConnectionCallback;
-typedef std::function<void(TcpConnectionPtr, Error)> TcpConnectionWriteCallback;
-typedef std::function<void(TcpConnectionPtr, Buffer*, Error)> TcpConnectionReadCallback;
+typedef std::function<void(TcpConnectionPtr, Error)> TcpConnectionIOCallback;
 typedef std::function<void()> EventCallback;
 
 // some utility functions
@@ -114,7 +115,7 @@ inline Timepoint Now()
     return std::chrono::system_clock::now();
 }
 
-// TODO tmp function, should delete
+// FIXME tmp function, should delete
 void onNewConnection(TcpConnectionPtr);
 }
 

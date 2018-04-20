@@ -140,20 +140,17 @@ void ConnectState::finalise(Error error)
     {
         LOG_WARN("retrying connection to %s on fd %d for over 3 times, callback as failure",
                     socket.GetRemoteAddr().ToString().c_str(), fd);
-        connector->DecreaseConnectionNum();
     }
     else if(error.first == ErrorType::ConnectTimedout)
     {
         LOG_WARN("found connection to %s on fd %d timedout, callback as failure",
                     socket.GetRemoteAddr().ToString().c_str(), fd);
-        connector->DecreaseConnectionNum();
     }
     else if(error.first == ErrorType::ConnectError)
     {
         assert(error.second > 0);
         LOG_WARN("found connection to %s failed on fd %d, errno was %d",
                     socket.GetRemoteAddr().ToString().c_str(), fd, error.second);
-        connector->DecreaseConnectionNum();
     }
     else
     {
@@ -163,17 +160,18 @@ void ConnectState::finalise(Error error)
         InetAddr remoteAddr = socket.GetRemoteAddr();
         LOG_DEBUG("connection to %s succeeded on fd %d", remoteAddr.ToString().c_str(), fd);
         // work passed from itself to TcpConnection TODO apply conf
-        newConn = TcpConnection::New(std::move(socket), std::move(channel),
-                                        true, connector, localAddr, remoteAddr,
-                                        connector->owner->GetTimer(),
-                                        connector->owner->GetTimer());
+        newConn = connector->makeTcpConnection(std::move(socket), std::move(channel),
+                                                true, localAddr, remoteAddr,
+                                                connector->owner->GetTimer(),
+                                                connector->owner->GetTimer());
+        connector->AddTcpConnection(newConn);
     }
 
-    callback(newConn);
-
-    // destroy THIS connState obj
+    // destroy THIS connState obj, but we've got a reference by weak_ptr before
     finalised = true;
-    connector->connections.erase(fd);
+    connector->ongoingConnections.erase(fd);
+
+    callback(newConn);
 }
 
 void ConnectState::Check(int ret)
@@ -185,7 +183,7 @@ void ConnectState::Check(int ret)
     if(ret > 0)
     {
         // add to map
-        auto res = connector->connections.emplace(fd, shared_from_this());
+        auto res = connector->ongoingConnections.emplace(fd, shared_from_this());
         assert(res.second);
 
         trace();
@@ -211,12 +209,15 @@ void Connector::Connect(const InetAddr& remoteAddr, TcpConnectionCallback cb)
         return;
     }
 
-    IncreaseConnectionNum();
-    if(connectionNum >= connectionLimit)
+    // ongoing and in-pool connections are all counted,
+    // because they are all using sockets
+    // A connection must be either at these two state
+    if(GetConnNumber() + static_cast<int>(ongoingConnections.size()) + 1 > connectionLimit)
     {
-        LOG_ALERT("Connector found current connections number %d is over limit %d"
-                    " connection failed", connectionNum, connectionLimit);
-        DecreaseConnectionNum();
+        LOG_ALERT("Connector found current active connections number %d plus"
+                    " current in-pool connections number %d is over limit %d"
+                    " connection failed",
+                    ongoingConnections.size(), GetConnNumber(), connectionLimit);
         cb(nullptr);
         return;
     }
@@ -229,8 +230,8 @@ void Connector::Connect(const InetAddr& remoteAddr, TcpConnectionCallback cb)
 
     if(ret >= 0)
     {
-        shared_ptr<ConnectState> connStatePtr(new ConnectState(std::move(connsock),
-                                                                std::move(cb), this));
+        auto connStatePtr = make_shared<ConnectState>(std::move(connsock),
+                                                        std::move(cb), this);
         connStatePtr->Check(ret);
     }
     else
@@ -238,8 +239,24 @@ void Connector::Connect(const InetAddr& remoteAddr, TcpConnectionCallback cb)
         assert(error.second > 0);
         LOG_WARN("Connector failed to connect() %s on fd %d with error <%d, %d>",
                     remoteAddr.ToString().c_str(), fd, error.first, error.second);
-        DecreaseConnectionNum();
         cb(nullptr);
         return;
     }
+}
+
+void Connector::handleKeepalivedRead(TcpConnectionPtr conn, Error error)
+{
+    LOG_NOTICE("%ld bytes unexpected data read from TcpConnection %ld with error %d",
+                conn->GetReadBuffer()->AvailableSize(), conn->Index(), error);
+
+    conn->Close();
+}
+
+void Connector::RetainTcpConnection(TcpConnectionPtr conn)
+{
+    // set read callback
+    assert(!conn->Active());
+    // TODO apply conf for timedoutMsec
+    conn->SetReadCallback(std::bind(&Connector::handleKeepalivedRead,
+                                    this, placeholders::_1, placeholders::_2), 60000);
 }

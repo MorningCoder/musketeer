@@ -31,6 +31,7 @@ public:
         return logger;
     }
 
+    // TODO load balance needed
     NetWorker& GetNetWorker()
     {
         return *netWorkers[0];

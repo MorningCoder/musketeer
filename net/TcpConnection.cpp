@@ -37,24 +37,31 @@ void TcpConnection::Close()
         connfd.Close();
         // buffers will all be cleared
         writeBufChain.clear();
-        // decrease active connections number
-        creator->DecreaseConnectionNum();
+        // remove connection from pool TODO maybe no need to use shared_from_this()?
+        creator->RemoveTcpConnection(shared_from_this());
 
         status = TcpConnectionStatus::Closed;
+        SetActive(false);
     }
 }
 
-void TcpConnection::SetReadCallback(TcpConnectionReadCallback cb, Buffer* buf, int msec)
+void TcpConnection::Retain()
 {
-    assert(buf->AppendableSize() > 0);
+    SetActive(false);
+    creator->RetainTcpConnection(shared_from_this());
+}
+
+void TcpConnection::SetReadCallback(TcpConnectionIOCallback cb, int msec)
+{
+    // FIXME use buffer chain!
+    assert(readBuf->AppendableSize() > 0);
     assert(!channel->IsReading());
 
     readAvailableCallback = std::move(cb);
-    readBuf = buf;
 
     if(status != TcpConnectionStatus::Established)
     {
-        readAvailableCallback(shared_from_this(), buf, Error(ReadError, savedErrno));
+        readAvailableCallback(shared_from_this(), Error(ReadError, savedErrno));
         return;
     }
 
@@ -69,7 +76,13 @@ void TcpConnection::SetReadCallback(TcpConnectionReadCallback cb, Buffer* buf, i
     readTimer->Update(msec);
 }
 
-void TcpConnection::Send(TcpConnectionWriteCallback cb, int msec)
+Buffer* TcpConnection::GetReadBuffer()
+{
+    // TODO should we check buffer's availability? what if there is a buffer chain ?
+    return readBuf.get();
+}
+
+void TcpConnection::Send(TcpConnectionIOCallback cb, int msec)
 {
     assert(!channel->IsWriting());
 
@@ -88,13 +101,14 @@ void TcpConnection::Send(TcpConnectionWriteCallback cb, int msec)
     handleWrite();
 }
 
-Buffer* TcpConnection::GetWriteableBuffer()
+Buffer* TcpConnection::GetWriteBuffer()
 {
-    size_t bsize = CDefaultWriteBufferSize;
+    // TODO use conf file instead
+    size_t bsize = 32768;
 
     for(auto it = writeBufChain.begin(); it != writeBufChain.end(); it++)
     {
-        if(bsize == CDefaultWriteBufferSize)
+        if(bsize == 32768)
         {
             bsize = it->Capacity();
         }
@@ -115,7 +129,6 @@ Buffer* TcpConnection::GetWriteableBuffer()
 
 void TcpConnection::handleRead()
 {
-    assert(readBuf);
     readTimer->Cancel();
     if(status != TcpConnectionStatus::Established)
     {
@@ -124,7 +137,7 @@ void TcpConnection::handleRead()
             channel->DisableReading();
         }
 
-        readAvailableCallback(shared_from_this(), readBuf, Error(ReadError, savedErrno));
+        readAvailableCallback(shared_from_this(), Error(ReadError, savedErrno));
         return;
     }
 
@@ -153,7 +166,7 @@ void TcpConnection::handleRead()
         channel->DisableReading();
     }
 
-    readAvailableCallback(shared_from_this(), readBuf, error);
+    readAvailableCallback(shared_from_this(), error);
 }
 
 void TcpConnection::handleWrite()
@@ -230,24 +243,6 @@ void TcpConnection::handleError()
     Close();
 }
 
-TcpConnectionPtr TcpConnection::New(Socket sock, ChannelPtr chan, bool connecting,
-                                    TcpConnectionCreator* creator,
-                                    const InetAddr& localAddr, const InetAddr& remoteAddr,
-                                    TimerPtr rtimer, TimerPtr wtimer)
-{
-    LOG_DEBUG("%s TcpConnection %s -> %s on fd %d is created",
-                connecting ? "positive" : "negative",
-                connecting ? localAddr.ToString().c_str() : remoteAddr.ToString().c_str(),
-                connecting ? remoteAddr.ToString().c_str() : localAddr.ToString().c_str(),
-                sock.Getfd());
-    TcpConnectionPtr newConn(new TcpConnection(std::move(sock), std::move(chan), connecting,
-                                                creator, localAddr, remoteAddr,
-                                                std::move(rtimer), std::move(wtimer)));
-    newConn->Init();
-
-    return std::move(newConn);
-}
-
 void TcpConnection::handleReadTimedout()
 {
     assert(channel->IsReading());
@@ -256,7 +251,7 @@ void TcpConnection::handleReadTimedout()
     // set read callback to nullptr to avoid double calling
     channel->UnsetReadCallback();
 
-    readAvailableCallback(shared_from_this(), readBuf, Error(ReadTimedout, 0));
+    readAvailableCallback(shared_from_this(), Error(ReadTimedout, 0));
 }
 
 void TcpConnection::handleWriteTimedout()

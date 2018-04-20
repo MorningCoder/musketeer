@@ -32,6 +32,8 @@ public:
     // use default destructor
 
     std::string ToString() const;
+    // used as an unique id
+    uint64_t ToNumeric() const;
 
     // get addr inside
     struct sockaddr_in Get() const

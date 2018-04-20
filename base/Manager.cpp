@@ -15,6 +15,7 @@ Manager gManager;
 bool Manager::CheckAndSet()
 {
     // check each threads
+    // TODO apply conf for error log file
     if(!logger.CheckAndSet(LogLevel::Debug, "./error.log"))
     {
         return false;

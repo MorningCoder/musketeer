@@ -34,12 +34,14 @@ public:
     bool BindLocalAddr(const InetAddr& addr);
     // will be called by every worker thread
     void Listen();
+
+    void RetainTcpConnection(TcpConnectionPtr);
 private:
     // read event handler for listenfd
     void handleAccept();
+    // read event handler for keep-alived connection
+    void handleKeepalivedRead(TcpConnectionPtr, Error);
 
-    // owner worker
-    NetWorker* owner;
     // fd only for listening
     Socket listenfd;
     // listenChannel must belong to different EventCycle
@@ -49,7 +51,7 @@ private:
     // connection number limit set by configure file
     // this is a number that is divided by number of threads
     // because we assume reuseport has balanced all the connections
-    int connectionLimit;
+    const int connectionLimit;
 };
 }
 

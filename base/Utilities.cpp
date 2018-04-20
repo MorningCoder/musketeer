@@ -6,6 +6,8 @@
 
 #include "base/Utilities.h"
 #include "base/Manager.h"
+// TODO no need
+#include "net/TcpConnection.h"
 
 namespace musketeer
 {
@@ -377,9 +379,45 @@ else
 }
 }
 */
+static void onResponseSent(TcpConnectionPtr conn, Error err)
+{
+    if(err.first != ErrorType::NoError)
+    {
+        LOG_DEBUG("error <%d, %d> occured, closed", err.first, err.second);
+        conn->Close();
+        return;
+    }
 
+    LOG_DEBUG("data sent");
+
+    conn->Close();
+}
+
+static void onNewRequest(TcpConnectionPtr conn, Error err)
+{
+    if(err.first != ErrorType::NoError)
+    {
+        LOG_DEBUG("error <%d, %d> occured, closed", err.first, err.second);
+        conn->Close();
+        return;
+    }
+
+    RawBuf buf = conn->GetReadBuffer()->AvailablePos();
+    LOG_DEBUG("%ld bytes new data read: [%s] from conn %ld",
+                buf.second, buf.first, conn->Index());
+
+    Buffer* wbuf = conn->GetWriteBuffer();
+    wbuf->Append(std::string("HTTP/1.1 200 OK\r\nServer: musketeer\r\nContent-Length: 4"
+                "\r\n\r\nhaha"));
+    conn->Send(onResponseSent, 3000);
+}
+
+// FIXME delete it
 void onNewConnection(TcpConnectionPtr conn)
 {
-    LOG_DEBUG("new connection %p established", conn.get());
+    assert(conn->Status() == TcpConnectionStatus::Established);
+    LOG_DEBUG("new connection %ld established", conn->Index());
+    conn->SetReadCallback(onNewRequest, 3000);
 }
+
 }

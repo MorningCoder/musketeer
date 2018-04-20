@@ -26,17 +26,17 @@ public:
     TcpConnection(Socket sock, ChannelPtr chan, bool connected, TcpConnectionCreator* c,
                     const InetAddr& localAddr_, const InetAddr& remoteAddr_,
                     TimerPtr readTimer_, TimerPtr writeTimer_,
-                    size_t wbufsize = CDefaultWriteBufferSize)
+                    size_t wbufsize, size_t rbufsize)
       : connfd(std::move(sock)),
         channel(std::move(chan)),
         positive(connected),
+        active(true),
         status(TcpConnectionStatus::Established),
         savedErrno(0),
-        index(connfd.Getfd()),
         readAvailableCallback(),
         writeFinishedCallback(),
         writeBufChain(1, wbufsize),
-        readBuf(nullptr),
+        readBuf(new Buffer(rbufsize)),
         localAddr(localAddr_),
         remoteAddr(remoteAddr_),
         readTimer(std::move(readTimer_)),
@@ -64,11 +64,6 @@ public:
         return status;
     }
 
-    int Index() const
-    {
-        return index;
-    }
-
     const InetAddr& LocalAddr() const
     {
         return localAddr;
@@ -79,28 +74,58 @@ public:
         return remoteAddr;
     }
 
+    std::string ToString() const
+    {
+        return localAddr.ToString() + " -> " + remoteAddr.ToString();
+    }
+
+    // use pointer value as unique index
+    TcpConnectionID Index() const
+    {
+        return reinterpret_cast<uint64_t>(this);
+    }
+
+    // An index used to mark a TcpConnection's group having same remote addrs
+    TcpConnectionGroupID GroupIndex() const
+    {
+        return remoteAddr.ToNumeric();
+    }
+
+    bool Active() const
+    {
+        return active;
+    }
+
+    void SetActive(bool act)
+    {
+        active = act;
+    }
+
     // initialise this connection, including register channel and set callbacks
     void Init();
 
-    // close this connection, including close channel and socket
+    // close this connection, including close channel and socket,
+    // and remove itself from connection pool
     void Close();
+    // retain this connection in connection pool, should set read callback
+    // to monitor its status all the time
+    void Retain();
 
     // set read callback and timedout msecs, new data will be appended into buf
-    void SetReadCallback(TcpConnectionReadCallback, Buffer*, int);
+    // we assume caller will read all the data before the next call of SetReadCallback()
+    void SetReadCallback(TcpConnectionIOCallback, int);
+    // get the first buffer which has available data to be read
+    Buffer* GetReadBuffer();
 
     // Send() tries to send all the data inside writeBuf
     // if write event is not set, Send() will try to call send() first,
     // and then add the event for futher writing operation if necessary
     // writeFinishedCallback will be called after write operation is done
     // writeFinishedCallback will be called immediately if writeBuf is empty
-    void Send(TcpConnectionWriteCallback, int);
+    void Send(TcpConnectionIOCallback, int);
     // require a write buffer to append data by caller
     // will allocate one if there is no available ones
-    Buffer* GetWriteableBuffer();
-
-    // factory method, the only interface to create TcpConnection
-    static TcpConnectionPtr New(Socket, ChannelPtr, bool, TcpConnectionCreator*,
-                                    const InetAddr&, const InetAddr&, TimerPtr, TimerPtr);
+    Buffer* GetWriteBuffer();
 
 private:
     void handleRead();
@@ -111,8 +136,6 @@ private:
     // get write buffer statistics data
     //void writeBufChainStat(size_t&, size_t&);
 
-    // default write buffer size is 4K for each
-    static const size_t CDefaultWriteBufferSize = 4*1024;
     // max write buffer numbers
     static const int CMaxWriteBufferNum = 4;
 
@@ -122,19 +145,20 @@ private:
     ChannelPtr channel;
     // a flag indicating wether this connection is used as client or a server
     bool positive;
+    // a flag indicating wether this connection is current reading/writing
+    bool active;
     // only 3 statuses
     TcpConnectionStatus status;
     int savedErrno;
-    // same as socket value, NOT unique
-    int index;
     // read event callback set by outside application
-    TcpConnectionReadCallback readAvailableCallback;
+    TcpConnectionIOCallback readAvailableCallback;
     // will call this callback when all the data in writeBuf have been writen to kernel
-    TcpConnectionWriteCallback writeFinishedCallback;
+    TcpConnectionIOCallback writeFinishedCallback;
     // writeBuf is managed by TcpConnection
+    // TODO buffer should support chain itself
     std::list<Buffer> writeBufChain;
-    // readBuf is set by caller
-    Buffer* readBuf;
+    // we assume caller will read all the data before the next call of SetReadCallback()
+    std::unique_ptr<Buffer> readBuf;
     // address info
     InetAddr localAddr;
     InetAddr remoteAddr;

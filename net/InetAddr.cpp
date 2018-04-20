@@ -46,6 +46,11 @@ string InetAddr::ToString() const
     return string(buf) + ":" + to_string(::ntohs(addr.sin_port));
 }
 
+uint64_t InetAddr::ToNumeric() const
+{
+    return ((static_cast<uint64_t>(addr.sin_addr.s_addr) << 16) | addr.sin_port);
+}
+
 const struct sockaddr* InetAddr::GeneraliseAddr(const struct sockaddr_in* addr)
 {
     return static_cast<const struct sockaddr*>(static_cast<const void*>(addr));
