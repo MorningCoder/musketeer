@@ -6,6 +6,7 @@
 #include <utility>
 #include <functional>
 #include <memory>
+#include <map>
 #include <list>
 #include <chrono>
 #include <string>
@@ -76,6 +77,22 @@ enum ErrorType
     // DiskTimedout
 };
 
+typedef std::pair<std::string, std::string> HttpHeader;
+
+// A HttpRequest represents a http request message
+// includes headers that can only appear in requests
+struct HttpRequest
+{
+    std::string Url;
+    std::vector<HttpHeader> Headers;
+};
+
+struct HttpResponse
+{
+    int RespCode;
+    std::vector<HttpHeader> Headers;
+};
+
 // types
 typedef uint64_t TcpConnectionID;
 typedef uint64_t TcpConnectionGroupID;
@@ -115,8 +132,6 @@ inline Timepoint Now()
     return std::chrono::system_clock::now();
 }
 
-// FIXME tmp function, should delete
-void onNewConnection(TcpConnectionPtr);
 }
 
 #endif //MUSKETEER_BASE_UTILITIES_H

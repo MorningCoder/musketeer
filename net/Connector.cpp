@@ -90,10 +90,18 @@ void ConnectState::handleError()
         return;
     }
 
+    LOG_DEBUG("start to process error event");
+
     int err = socket.GetError();
-    // an error must have been occured
-    assert(err > 0);
-    finalise(Error(ConnectError, err));
+
+    if(err > 0)
+    {
+        finalise(Error(ConnectError, err));
+    }
+    else
+    {
+        finalise(Error(NoError, 0));
+    }
 }
 
 void ConnectState::handleTimedout()

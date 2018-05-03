@@ -4,6 +4,7 @@
 #include "base/Utilities.h"
 #include "base/Manager.h"
 #include "net/InetAddr.h"
+#include "net/http/HttpContext.h"
 
 using namespace std;
 
@@ -23,7 +24,7 @@ bool Manager::CheckAndSet()
 
     for(unsigned int i = 0; i < thread::hardware_concurrency(); i++)
     {
-        auto netWorker = make_unique<NetWorker>(onNewConnection, i);
+        auto netWorker = make_unique<NetWorker>(HttpContext::OnNewRequest, i);
         // TODO apply conf !!!
         if(!netWorker->CheckAndSet(InetAddr("127.0.0.1", 7000)))
         {
@@ -47,6 +48,20 @@ void Manager::InitThreads()
     {
         (*it)->StartThread();
     }
+}
+
+NetWorker& Manager::GetNetWorker()
+{
+    auto currid = this_thread::get_id();
+    for(auto i = netWorkers.begin(); i != netWorkers.end(); i++)
+    {
+        if((*i)->ThreadId() == currid)
+        {
+            return *(*i);
+        }
+    }
+
+    assert(0);
 }
 
 }

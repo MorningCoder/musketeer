@@ -16,6 +16,7 @@
 #include "net/TcpConnection.h"
 #include "unistd.h"
 #include <sys/eventfd.h>
+#include <signal.h>
 #include <cstdlib>
 #include "base/Manager.h"
 #include <sys/socket.h>
@@ -25,19 +26,35 @@
 #include "net/Listener.h"
 #include "net/NetWorker.h"
 #include "base/CycleThread.h"
+#include "net/http/Hook.h"
 
 using namespace std;
 using namespace std::placeholders;
 using namespace musketeer;
 
+extern vector<IPlugin*> gPlugins;
+
+extern IPlugin* gRedirectionPlugin;
+extern IPlugin* gOhcHostPlugin;
+
 int main()
 {
+    ::signal(SIGPIPE, SIG_IGN);
+
     if(!gManager.CheckAndSet())
     {
         return 1;
     }
 
     gManager.InitThreads();
+
+    gPlugins.push_back(gOhcHostPlugin);
+    gPlugins.push_back(gRedirectionPlugin);
+
+    for(auto p : gPlugins)
+    {
+        p->Init();
+    }
 
     sleep(10000);
 

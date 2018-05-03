@@ -32,10 +32,8 @@ public:
     }
 
     // TODO load balance needed
-    NetWorker& GetNetWorker()
-    {
-        return *netWorkers[0];
-    }
+    NetWorker& GetNetWorker();
+
 private:
     // threads
     Logger logger;

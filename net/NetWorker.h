@@ -5,6 +5,7 @@
 
 #include <string>
 #include <atomic>
+#include <thread>
 
 #include "net/Listener.h"
 #include "net/Connector.h"
@@ -42,6 +43,11 @@ public:
     TimerPtr GetTimer()
     {
         return timerQueue.NewTimer();
+    }
+
+    std::thread::id ThreadId() const
+    {
+        return workerThread.ThreadId();
     }
 
     // check bind
